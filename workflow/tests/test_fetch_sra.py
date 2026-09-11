@@ -12,6 +12,7 @@ import logging
 import os
 import pathlib
 import sys
+import time
 
 import pytest
 
@@ -312,3 +313,15 @@ def test_no_fastq_without_fallback_fails(tmp_path, monkeypatch):
     lines[1] = "\t".join(cols)
     monkeypatch.setattr(fs, "http_get", fake_http("\n".join(lines) + "\n"))
     assert fs.main(["PRJNA1", "-o", str(tmp_path), "--dry-run"]) == 1
+
+
+def test_stalled_fasterq_dump_is_killed(tmp_path, monkeypatch):
+    fake = tmp_path / "fasterq-dump"
+    fake.write_text("#!/bin/sh\nexec sleep 30\n")
+    fake.chmod(0o755)
+    monkeypatch.setattr(fs.shutil, "which", lambda name: str(fake))
+    monkeypatch.setattr(fs, "SRA_TIMEOUT", 1)
+    start = time.monotonic()
+    with pytest.raises(fs.FetchError, match="timed out after 1 s"):
+        fs.fetch_with_sra_tools({"run_accession": "SRR1", "read_count": "10"}, str(tmp_path), 1)
+    assert time.monotonic() - start < 10

@@ -61,6 +61,7 @@ NCBI_BATCH = 100
 NCBI_MIN_INTERVAL = 0.34  # NCBI allows 3 requests per second without an API key
 CHUNK = 1 << 20
 BACKOFF = 2  # retry waits are BACKOFF ** attempt seconds, capped at 60
+SRA_TIMEOUT = 3600  # seconds before fasterq-dump is killed
 USER_AGENT = f"AmpliPub-fetch_sra/{__version__}"
 
 log = logging.getLogger("fetch_sra")
@@ -374,7 +375,11 @@ def fetch_with_sra_tools(row: dict, dest_dir: str, threads: int) -> list[ReadFil
     cmd = [exe, "--split-files", "--threads", str(threads), "--temp", tmp, "--outdir", tmp, run]
     log.info("%s: %s", run, shlex.join(cmd))
     try:
-        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        # stdin closed and a time limit, so a stalled download cannot hang the run.
+        subprocess.run(cmd, check=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                       stderr=subprocess.STDOUT, timeout=SRA_TIMEOUT)
+    except subprocess.TimeoutExpired as exc:
+        raise FetchError(f"{run}: fasterq-dump timed out after {SRA_TIMEOUT} s and was killed") from exc
     except subprocess.CalledProcessError as exc:
         raise FetchError(f"{run}: fasterq-dump failed:\n{exc.stdout.decode(errors='replace')}") from exc
     produced = sorted(f for f in os.listdir(tmp) if f.endswith(".fastq"))
