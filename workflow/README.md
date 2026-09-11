@@ -137,3 +137,47 @@ Each one stops the run with a message, and each has a test in `tests/`.
 | One report per input, naming that input | A missing or mismatched report means FastQC skipped a file |
 | R1 and R2 of a run must hold the same number of reads | A pair that no longer matches breaks merging later |
 | MultiQC must write its report | Checked at the output boundary |
+
+## 01_primers.py
+
+Removes primers with `qiime cutadapt trim-paired` and reports, per sample, how many reads
+carried them. Runs in the QIIME 2 environment. Standard library Python 3.8 or later.
+
+```bash
+python workflow/01_primers.py -i ~/research/baxter2016/q2/demux.qza -o ~/research/baxter2016/q2/primers
+```
+
+Cutadapt always runs. If the reads carry no primers, nothing is cut and every read comes
+out unchanged, and the report says so.
+
+| Option | Meaning |
+|---|---|
+| `--primer-f`, `--primer-r` | Primers, default 515F `GTGCCAGCMGCCGCGGTAA` and 806R `GGACTACHVGGGTWTCTAAT` |
+| `--discard-untrimmed` | Drop pairs where no primer was found. Only for reads that carry primers |
+| `--cores N` | CPU cores for cutadapt, default 4 |
+| `--timeout S` | Seconds before cutadapt is killed, default 7200 |
+
+Two settings keep primer-free reads intact. Primers are anchored (`^`), so only a full
+primer at the start of a read is cut; without the anchor, cutadapt also cuts a partial
+match of 3 or more bases. Untrimmed pairs are kept by default; discarding them would drop
+every read of primer-free data.
+
+### Outputs
+
+| File | Contents |
+|---|---|
+| `trimmed.qza` | Reads for the next stage |
+| `primer_summary.tsv` | One row per sample: pairs in, R1 and R2 with primer, pairs out, and percentages |
+| `cutadapt_report.log` | Cutadapt's full report for every sample |
+| `primers_log.txt` | Command, versions, and a one-line verdict: primers absent, present, or mixed |
+
+### Guards
+
+| Guard | Why |
+|---|---|
+| Primers must be IUPAC bases, at least 10 | A typo would silently match nothing |
+| The input must be a paired demux artifact, every sample with both reads | Checked from the artifact's MANIFEST |
+| One cutadapt report per sample, matched by file name to the MANIFEST | QIIME's output can run into cutadapt's report; a parser that missed those would drop samples silently |
+| Pairs out must equal pairs in when untrimmed reads are kept | Any loss means something other than primer removal happened |
+| The trimmed artifact must hold the same samples | Checked at the output boundary |
+| A mix of trimmed and untrimmed samples is flagged | Usually a wrong primer, or libraries trimmed differently |

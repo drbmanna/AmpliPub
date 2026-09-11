@@ -1,0 +1,476 @@
+This is cutadapt 5.1 with Python 3.10.14
+Command line parameters: -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143538_1_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143538_46_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143538_1_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143538_46_L001_R2_001.fastq.gz
+Processing paired-end reads on 4 cores ...
+
+=== Summary ===
+
+Total read pairs processed:             42,883
+  Read 1 with adapter:                       0 (0.0%)
+  Read 2 with adapter:                       0 (0.0%)
+
+== Read fate breakdown ==
+Pairs that were too short:                   0 (0.0%)
+Pairs written (passing filters):        42,883 (100.0%)
+
+Total basepairs processed:    21,527,266 bp
+  Read 1:    10,763,633 bp
+  Read 2:    10,763,633 bp
+Quality-trimmed:                       0 bp (0.0%)
+  Read 1:             0 bp
+  Read 2:             0 bp
+Total written (filtered):     21,527,266 bp (100.0%)
+  Read 1:    10,763,633 bp
+  Read 2:    10,763,633 bp
+
+=== First read: Adapter 1 ===
+
+Sequence: GTGCCAGCMGCCGCGGTAA; Type: anchored 5'; Length: 19; Trimmed: 0 times
+
+=== Second read: Adapter 2 ===
+
+Sequence: GGACTACHVGGGTWTCTAAT; Type: anchored 5'; Length: 20; Trimmed: 0 times
+This is cutadapt 5.1 with Python 3.10.14
+Command line parameters: -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143541_38_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143541_83_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143541_38_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143541_83_L001_R2_001.fastq.gz
+Processing paired-end reads on 4 cores ...
+
+=== Summary ===
+
+Total read pairs processed:              7,757
+  Read 1 with adapter:                       0 (0.0%)
+  Read 2 with adapter:                       0 (0.0%)
+
+== Read fate breakdown ==
+Pairs that were too short:                   0 (0.0%)
+Pairs written (passing filters):         7,757 (100.0%)
+
+Total basepairs processed:     3,894,014 bp
+  Read 1:     1,947,007 bp
+  Read 2:     1,947,007 bp
+Quality-trimmed:                       0 bp (0.0%)
+  Read 1:             0 bp
+  Read 2:             0 bp
+Total written (filtered):      3,894,014 bp (100.0%)
+  Read 1:     1,947,007 bp
+  Read 2:     1,947,007 bp
+
+=== First read: Adapter 1 ===
+
+Sequence: GTGCCAGCMGCCGCGGTAA; Type: anchored 5'; Length: 19; Trimmed: 0 times
+
+=== Second read: Adapter 2 ===
+
+Sequence: GGACTACHVGGGTWTCTAAT; Type: anchored 5'; Length: 20; Trimmed: 0 times
+This is cutadapt 5.1 with Python 3.10.14
+Command line parameters: -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143542_39_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143542_84_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143542_39_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143542_84_L001_R2_001.fastq.gz
+Processing paired-end reads on 4 cores ...
+
+=== Summary ===
+
+Total read pairs processed:             87,874
+  Read 1 with adapter:                       0 (0.0%)
+  Read 2 with adapter:                       0 (0.0%)
+
+== Read fate breakdown ==
+Pairs that were too short:                   0 (0.0%)
+Pairs written (passing filters):        87,874 (100.0%)
+
+Total basepairs processed:    44,112,748 bp
+  Read 1:    22,056,374 bp
+  Read 2:    22,056,374 bp
+Quality-trimmed:                       0 bp (0.0%)
+  Read 1:             0 bp
+  Read 2:             0 bp
+Total written (filtered):     44,112,748 bp (100.0%)
+  Read 1:    22,056,374 bp
+  Read 2:    22,056,374 bp
+
+=== First read: Adapter 1 ===
+
+Sequence: GTGCCAGCMGCCGCGGTAA; Type: anchored 5'; Length: 19; Trimmed: 0 times
+
+=== Second read: Adapter 2 ===
+
+Sequence: GGACTACHVGGGTWTCTAAT; Type: anchored 5'; Length: 20; Trimmed: 0 times
+This is cutadapt 5.1 with Python 3.10.14
+Command line parameters: -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143549_34_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143549_79_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143549_34_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143549_79_L001_R2_001.fastq.gz
+Processing paired-end reads on 4 cores ...
+
+=== Summary ===
+
+Total read pairs processed:             60,603
+  Read 1 with adapter:                       0 (0.0%)
+  Read 2 with adapter:                       0 (0.0%)
+
+== Read fate breakdown ==
+Pairs that were too short:                   0 (0.0%)
+Pairs written (passing filters):        60,603 (100.0%)
+
+Total basepairs processed:    30,422,706 bp
+  Read 1:    15,211,353 bp
+  Read 2:    15,211,353 bp
+Quality-trimmed:                       0 bp (0.0%)
+  Read 1:             0 bp
+  Read 2:             0 bp
+Total written (filtered):     30,422,706 bp (100.0%)
+  Read 1:    15,211,353 bp
+  Read 2:    15,211,353 bp
+
+=== First read: Adapter 1 ===
+
+Sequence: GTGCCAGCMGCCGCGGTAA; Type: anchored 5'; Length: 19; Trimmed: 0 times
+
+=== Second read: Adapter 2 ===
+
+Sequence: GGACTACHVGGGTWTCTAAT; Type: anchored 5'; Length: 20; Trimmed: 0 times
+This is cutadapt 5.1 with Python 3.10.14
+Command line parameters: -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143572_11_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143572_56_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143572_11_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143572_56_L001_R2_001.fastq.gz
+Processing paired-end reads on 4 cores ...
+
+=== Summary ===
+
+Total read pairs processed:             44,478
+  Read 1 with adapter:                       0 (0.0%)
+  Read 2 with adapter:                       0 (0.0%)
+
+== Read fate breakdown ==
+Pairs that were too short:                   0 (0.0%)
+Pairs written (passing filters):        44,478 (100.0%)
+
+Total basepairs processed:    22,327,956 bp
+  Read 1:    11,163,978 bp
+  Read 2:    11,163,978 bp
+Quality-trimmed:                       0 bp (0.0%)
+  Read 1:             0 bp
+  Read 2:             0 bp
+Total written (filtered):     22,327,956 bp (100.0%)
+  Read 1:    11,163,978 bp
+  Read 2:    11,163,978 bp
+
+=== First read: Adapter 1 ===
+
+Sequence: GTGCCAGCMGCCGCGGTAA; Type: anchored 5'; Length: 19; Trimmed: 0 times
+
+=== Second read: Adapter 2 ===
+
+Sequence: GGACTACHVGGGTWTCTAAT; Type: anchored 5'; Length: 20; Trimmed: 0 times
+This is cutadapt 5.1 with Python 3.10.14
+Command line parameters: -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143589_32_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143589_77_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143589_32_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143589_77_L001_R2_001.fastq.gz
+Processing paired-end reads on 4 cores ...
+
+=== Summary ===
+
+Total read pairs processed:             83,432
+  Read 1 with adapter:                       0 (0.0%)
+  Read 2 with adapter:                       0 (0.0%)
+
+== Read fate breakdown ==
+Pairs that were too short:                   0 (0.0%)
+Pairs written (passing filters):        83,432 (100.0%)
+
+Total basepairs processed:    41,882,864 bp
+  Read 1:    20,941,432 bp
+  Read 2:    20,941,432 bp
+Quality-trimmed:                       0 bp (0.0%)
+  Read 1:             0 bp
+  Read 2:             0 bp
+Total written (filtered):     41,882,864 bp (100.0%)
+  Read 1:    20,941,432 bp
+  Read 2:    20,941,432 bp
+
+=== First read: Adapter 1 ===
+
+Sequence: GTGCCAGCMGCCGCGGTAA; Type: anchored 5'; Length: 19; Trimmed: 0 times
+
+=== Second read: Adapter 2 ===
+
+Sequence: GGACTACHVGGGTWTCTAAT; Type: anchored 5'; Length: 20; Trimmed: 0 times
+This is cutadapt 5.1 with Python 3.10.14
+Command line parameters: -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143602_33_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143602_78_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143602_33_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143602_78_L001_R2_001.fastq.gz
+Processing paired-end reads on 4 cores ...
+
+=== Summary ===
+
+Total read pairs processed:             48,275
+  Read 1 with adapter:                       0 (0.0%)
+  Read 2 with adapter:                       0 (0.0%)
+
+== Read fate breakdown ==
+Pairs that were too short:                   0 (0.0%)
+Pairs written (passing filters):        48,275 (100.0%)
+
+Total basepairs processed:    24,234,050 bp
+  Read 1:    12,117,025 bp
+  Read 2:    12,117,025 bp
+Quality-trimmed:                       0 bp (0.0%)
+  Read 1:             0 bp
+  Read 2:             0 bp
+Total written (filtered):     24,234,050 bp (100.0%)
+  Read 1:    12,117,025 bp
+  Read 2:    12,117,025 bp
+
+=== First read: Adapter 1 ===
+
+Sequence: GTGCCAGCMGCCGCGGTAA; Type: anchored 5'; Length: 19; Trimmed: 0 times
+
+=== Second read: Adapter 2 ===
+
+Sequence: GGACTACHVGGGTWTCTAAT; Type: anchored 5'; Length: 20; Trimmed: 0 times
+This is cutadapt 5.1 with Python 3.10.14
+Command line parameters: -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143608_10_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143608_55_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143608_10_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143608_55_L001_R2_001.fastq.gz
+Processing paired-end reads on 4 cores ...
+
+=== Summary ===
+
+Total read pairs processed:             28,495
+  Read 1 with adapter:                       0 (0.0%)
+  Read 2 with adapter:                       0 (0.0%)
+
+== Read fate breakdown ==
+Pairs that were too short:                   0 (0.0%)
+Pairs written (passing filters):        28,495 (100.0%)
+
+Total basepairs processed:    14,304,490 bp
+  Read 1:     7,152,245 bp
+  Read 2:     7,152,245 bp
+Quality-trimmed:                       0 bp (0.0%)
+  Read 1:             0 bp
+  Read 2:             0 bp
+Total written (filtered):     14,304,490 bp (100.0%)
+  Read 1:     7,152,245 bp
+  Read 2:     7,152,245 bp
+
+=== First read: Adapter 1 ===
+
+Sequence: GTGCCAGCMGCCGCGGTAA; Type: anchored 5'; Length: 19; Trimmed: 0 times
+
+=== Second read: Adapter 2 ===
+
+Sequence: GGACTACHVGGGTWTCTAAT; Type: anchored 5'; Length: 20; Trimmed: 0 times
+This is cutadapt 5.1 with Python 3.10.14
+Command line parameters: -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143669_19_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143669_64_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143669_19_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143669_64_L001_R2_001.fastq.gz
+Processing paired-end reads on 4 cores ...
+
+=== Summary ===
+
+Total read pairs processed:            235,406
+  Read 1 with adapter:                       0 (0.0%)
+  Read 2 with adapter:                       0 (0.0%)
+
+== Read fate breakdown ==
+Pairs that were too short:                   0 (0.0%)
+Pairs written (passing filters):       235,406 (100.0%)
+
+Total basepairs processed:   118,173,812 bp
+  Read 1:    59,086,906 bp
+  Read 2:    59,086,906 bp
+Quality-trimmed:                       0 bp (0.0%)
+  Read 1:             0 bp
+  Read 2:             0 bp
+Total written (filtered):    118,173,812 bp (100.0%)
+  Read 1:    59,086,906 bp
+  Read 2:    59,086,906 bp
+
+=== First read: Adapter 1 ===
+
+Sequence: GTGCCAGCMGCCGCGGTAA; Type: anchored 5'; Length: 19; Trimmed: 0 times
+
+=== Second read: Adapter 2 ===
+
+Sequence: GGACTACHVGGGTWTCTAAT; Type: anchored 5'; Length: 20; Trimmed: 0 times
+This is cutadapt 5.1 with Python 3.10.14
+Command line parameters: -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143682_16_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143682_61_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143682_16_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143682_61_L001_R2_001.fastq.gz
+Processing paired-end reads on 4 cores ...
+
+=== Summary ===
+
+Total read pairs processed:             47,972
+  Read 1 with adapter:                       0 (0.0%)
+  Read 2 with adapter:                       0 (0.0%)
+
+== Read fate breakdown ==
+Pairs that were too short:                   0 (0.0%)
+Pairs written (passing filters):        47,972 (100.0%)
+
+Total basepairs processed:    24,081,944 bp
+  Read 1:    12,040,972 bp
+  Read 2:    12,040,972 bp
+Quality-trimmed:                       0 bp (0.0%)
+  Read 1:             0 bp
+  Read 2:             0 bp
+Total written (filtered):     24,081,944 bp (100.0%)
+  Read 1:    12,040,972 bp
+  Read 2:    12,040,972 bp
+
+=== First read: Adapter 1 ===
+
+Sequence: GTGCCAGCMGCCGCGGTAA; Type: anchored 5'; Length: 19; Trimmed: 0 times
+
+=== Second read: Adapter 2 ===
+
+Sequence: GGACTACHVGGGTWTCTAAT; Type: anchored 5'; Length: 20; Trimmed: 0 times
+This is cutadapt 5.1 with Python 3.10.14
+Command line parameters: -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143720_8_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143720_53_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143720_8_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143720_53_L001_R2_001.fastq.gz
+Processing paired-end reads on 4 cores ...
+
+=== Summary ===
+
+Total read pairs processed:             35,675
+  Read 1 with adapter:                       0 (0.0%)
+  Read 2 with adapter:                       0 (0.0%)
+
+== Read fate breakdown ==
+Pairs that were too short:                   0 (0.0%)
+Pairs written (passing filters):        35,675 (100.0%)
+
+Total basepairs processed:    17,908,850 bp
+  Read 1:     8,954,425 bp
+  Read 2:     8,954,425 bp
+Quality-trimmed:                       0 bp (0.0%)
+  Read 1:             0 bp
+  Read 2:             0 bp
+Total written (filtered):     17,908,850 bp (100.0%)
+  Read 1:     8,954,425 bp
+  Read 2:     8,954,425 bp
+
+=== First read: Adapter 1 ===
+
+Sequence: GTGCCAGCMGCCGCGGTAA; Type: anchored 5'; Length: 19; Trimmed: 0 times
+
+=== Second read: Adapter 2 ===
+
+Sequence: GGACTACHVGGGTWTCTAAT; Type: anchored 5'; Length: 20; Trimmed: 0 times
+This is cutadapt 5.1 with Python 3.10.14
+Command line parameters: -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143723_14_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143723_59_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143723_14_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143723_59_L001_R2_001.fastq.gz
+Processing paired-end reads on 4 cores ...
+
+=== Summary ===
+
+Total read pairs processed:             98,251
+  Read 1 with adapter:                       0 (0.0%)
+  Read 2 with adapter:                       0 (0.0%)
+
+== Read fate breakdown ==
+Pairs that were too short:                   0 (0.0%)
+Pairs written (passing filters):        98,251 (100.0%)
+
+Total basepairs processed:    49,322,002 bp
+  Read 1:    24,661,001 bp
+  Read 2:    24,661,001 bp
+Quality-trimmed:                       0 bp (0.0%)
+  Read 1:             0 bp
+  Read 2:             0 bp
+Total written (filtered):     49,322,002 bp (100.0%)
+  Read 1:    24,661,001 bp
+  Read 2:    24,661,001 bp
+
+=== First read: Adapter 1 ===
+
+Sequence: GTGCCAGCMGCCGCGGTAA; Type: anchored 5'; Length: 19; Trimmed: 0 times
+
+=== Second read: Adapter 2 ===
+
+Sequence: GGACTACHVGGGTWTCTAAT; Type: anchored 5'; Length: 20; Trimmed: 0 times
+This is cutadapt 5.1 with Python 3.10.14
+Command line parameters: -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143743_27_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143743_72_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143743_27_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143743_72_L001_R2_001.fastq.gz
+Processing paired-end reads on 4 cores ...
+
+=== Summary ===
+
+Total read pairs processed:             15,011
+  Read 1 with adapter:                       0 (0.0%)
+  Read 2 with adapter:                       0 (0.0%)
+
+== Read fate breakdown ==
+Pairs that were too short:                   0 (0.0%)
+Pairs written (passing filters):        15,011 (100.0%)
+
+Total basepairs processed:     7,535,522 bp
+  Read 1:     3,767,761 bp
+  Read 2:     3,767,761 bp
+Quality-trimmed:                       0 bp (0.0%)
+  Read 1:             0 bp
+  Read 2:             0 bp
+Total written (filtered):      7,535,522 bp (100.0%)
+  Read 1:     3,767,761 bp
+  Read 2:     3,767,761 bp
+
+=== First read: Adapter 1 ===
+
+Sequence: GTGCCAGCMGCCGCGGTAA; Type: anchored 5'; Length: 19; Trimmed: 0 times
+
+=== Second read: Adapter 2 ===
+
+Sequence: GGACTACHVGGGTWTCTAAT; Type: anchored 5'; Length: 20; Trimmed: 0 times
+Running external command line application(s). This may print messages to stdout and/or stderr.
+The command(s) being run are below. These commands cannot be manually re-run as they will depend on temporary files that no longer exist.
+
+Command: cutadapt -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143538_1_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143538_46_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143538_1_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143538_46_L001_R2_001.fastq.gz
+
+
+Command: cutadapt -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143541_38_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143541_83_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143541_38_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143541_83_L001_R2_001.fastq.gz
+
+
+Command: cutadapt -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143542_39_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143542_84_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143542_39_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143542_84_L001_R2_001.fastq.gz
+
+
+Command: cutadapt -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143549_34_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143549_79_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143549_34_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143549_79_L001_R2_001.fastq.gz
+
+
+Command: cutadapt -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143572_11_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143572_56_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143572_11_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143572_56_L001_R2_001.fastq.gz
+
+
+Command: cutadapt -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143589_32_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143589_77_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143589_32_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143589_77_L001_R2_001.fastq.gz
+
+
+Command: cutadapt -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143602_33_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143602_78_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143602_33_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143602_78_L001_R2_001.fastq.gz
+
+
+Command: cutadapt -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143608_10_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143608_55_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143608_10_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143608_55_L001_R2_001.fastq.gz
+
+
+Command: cutadapt -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143669_19_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143669_64_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143669_19_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143669_64_L001_R2_001.fastq.gz
+
+
+Command: cutadapt -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143682_16_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143682_61_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143682_16_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143682_61_L001_R2_001.fastq.gz
+
+
+Command: cutadapt -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143720_8_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143720_53_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143720_8_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143720_53_L001_R2_001.fastq.gz
+
+
+Command: cutadapt -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143723_14_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143723_59_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143723_14_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143723_59_L001_R2_001.fastq.gz
+
+
+Command: cutadapt -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143743_27_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143743_72_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143743_27_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143743_72_L001_R2_001.fastq.gz
+
+
+Command: This is cutadapt 5.1 with Python 3.10.14
+Command line parameters: -u 0 --error-rate 0.1 --times 1 --overlap 3 --minimum-length 1 -q 0,0 --quality-base 33 --cores 4 -o /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143748_17_L001_R1_001.fastq.gz -p /tmp/qiime2/ome/processes/11172-1789156356.42@ome/tmp/q2-OutPath-4if9l8f8/SRR2143748_62_L001_R2_001.fastq.gz --front ^GTGCCAGCMGCCGCGGTAA -G ^GGACTACHVGGGTWTCTAAT -U 0 /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143748_17_L001_R1_001.fastq.gz /tmp/qiime2/ome/data/2d03a6a1-f2d5-48a5-aab9-72d0babf2d5f/data/SRR2143748_62_L001_R2_001.fastq.gz
+Processing paired-end reads on 4 cores ...
+
+=== Summary ===
+
+Total read pairs processed:             45,313
+  Read 1 with adapter:                       0 (0.0%)
+  Read 2 with adapter:                       0 (0.0%)
+
+== Read fate breakdown ==
+Pairs that were too short:                   0 (0.0%)
+Pairs written (passing filters):        45,313 (100.0%)
+
+Total basepairs processed:    22,747,126 bp
+  Read 1:    11,373,563 bp
+  Read 2:    11,373,563 bp
+Quality-trimmed:                       0 bp (0.0%)
+  Read 1:             0 bp
+  Read 2:             0 bp
+Total written (filtered):     22,747,126 bp (100.0%)
+  Read 1:    11,373,563 bp
+  Read 2:    11,373,563 bp
+
+=== First read: Adapter 1 ===
+
+Sequence: GTGCCAGCMGCCGCGGTAA; Type: anchored 5'; Length: 19; Trimmed: 0 times
+
+=== Second read: Adapter 2 ===
+
+Sequence: GGACTACHVGGGTWTCTAAT; Type: anchored 5'; Length: 20; Trimmed: 0 times
