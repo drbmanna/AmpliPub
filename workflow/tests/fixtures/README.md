@@ -9,6 +9,7 @@ Real API responses saved on 2026-09-11. Not edited, only trimmed to a few rows.
 | `ena_three_files.tsv` | ENA filereport for `DRR045356` | A paired run that also lists an unpaired `DRR045356.fastq.gz` |
 | `biosample_two.xml` | NCBI efetch, `db=biosample`, `SAMN03939374,SAMN03939742` | Submitter attributes for two Baxter 2016 samples |
 | `cutadapt_excerpt.log` | First 476 lines of `qiime cutadapt trim-paired --verbose` (q2-cutadapt 2025.7, cutadapt 5.1) on the 45-run dev subset, stdout and stderr merged, 2026-09-12. Unedited | 14 per-sample reports, including one where QIIME's output runs into the report (`Command: This is cutadapt ...`) |
+| `dev_forward-seven-number-summaries.tsv`, `dev_reverse-seven-number-summaries.tsv` | `qiime demux summarize` (QIIME 2 2025.7, default `--p-n 10000`) on the 45-run dev `demux.qza`, 2026-09-11. Unedited | Real per-position quality quantiles. R1 median never falls below Q30; R2 first falls below Q30 at position 219 |
 | `SRR2144126_1_fastqc.zip` | FastQC 0.12.1 on `SRR2144126_1.fastq.gz`, run 2026-09-12 | Real report layout for `00_qc_raw.py`. Only `summary.txt` and `fastqc_data.txt` are kept, unedited; images and HTML are dropped for size |
 
 The ENA field list matches `ENA_FIELDS` in `00_fetch_sra.py`.

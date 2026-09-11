@@ -187,3 +187,50 @@ default `amplipub-qc`.
 | Pairs out must equal pairs in when untrimmed reads are kept | Any loss means something other than primer removal happened |
 | The trimmed artifact must hold the same samples | Checked at the output boundary |
 | A mix of trimmed and untrimmed samples is flagged | Usually a wrong primer, or libraries trimmed differently |
+
+## 02_quality.py
+
+Proposes the DADA2 truncation lengths from read quality, and stops if the truncated
+reads could not merge. Runs in the QIIME 2 environment. Standard library Python 3.8 or
+later.
+
+```bash
+python workflow/02_quality.py -i ~/research/baxter2016/q2/primers/trimmed.qza -o ~/research/baxter2016/q2/quality
+```
+
+DADA2 in QIIME 2 has no default truncation length. This script applies a rule fixed
+before the data were seen: each read is cut just before the first position whose median
+quality falls below Q30, R1 and R2 separately. It stops at the first dip even if quality
+recovers later.
+
+The truncated reads must still overlap. The floor is amplicon length + DADA2 minimum
+overlap + a margin for length variation: 253 + 12 + 20 = 285 bp for V4. Below it, merging
+fails and DADA2 returns a nearly empty table without an error, so the script stops and
+reports both lengths.
+
+| Option | Meaning |
+|---|---|
+| `--min-q Q` | Median quality a position must reach, default 30 |
+| `--amplicon-len`, `--min-overlap`, `--margin` | The overlap floor, defaults 253, 12 and 20 |
+| `--n N` | Reads sampled for the quality profile, default 10000 |
+| `--timeout S` | Seconds before `demux summarize` is killed, default 3600 |
+
+`qiime demux summarize` samples reads at random and takes no seed, so a rerun can shift
+a median slightly. The exact table behind the decision is kept.
+
+### Outputs
+
+| File | Contents |
+|---|---|
+| `trunc_len.tsv` | `trunc_len_f`, `trunc_len_r`, the rule's settings, and the expected overlap. Read by `03_dada2` |
+| `quality_profile.tsv` | Median quality and read count at every position, R1 and R2 |
+| `quality.qzv` | The QIIME 2 quality plots the numbers came from |
+| `quality_log.txt` | Command, rule, lengths, and the share of reads long enough to keep |
+
+### Guards
+
+| Guard | Why |
+|---|---|
+| Truncated reads must overlap by the floor | Merging otherwise collapses without an error |
+| Median below the threshold at position 1 is fatal | Nothing usable would be left |
+| Both quality tables must exist, positions 1..N in order, every row complete | A single-end input or a malformed table would give a wrong length silently |
