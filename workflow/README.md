@@ -89,3 +89,51 @@ python -m pytest workflow/tests -q
 
 Offline, using real ENA and NCBI responses saved as fixtures. They show the guards fire.
 They do not prove the downloads work against the live servers; the live run does that.
+
+## 00_qc_raw.py
+
+Runs FastQC on every FASTQ in a directory and combines the reports with MultiQC. Runs in
+the `amplipub-qc` environment (see Setup). Standard library Python 3.8 or later.
+
+```bash
+python workflow/00_qc_raw.py -i ~/research/baxter2016/raw/fastq -o ~/research/baxter2016/qc_raw
+```
+
+| Option | Meaning |
+|---|---|
+| `--threads N` | Files FastQC processes at once, default 4 (about 250 MB RAM each) |
+| `--timeout S` | Seconds before FastQC or MultiQC is killed, default 7200 |
+| `--env NAME` | Conda environment holding FastQC and MultiQC, default `amplipub-qc` |
+
+### Outputs
+
+| File | Contents |
+|---|---|
+| `multiqc_report.html` | All FastQC reports in one page |
+| `qc_summary.tsv` | One row per file: read count, each FastQC module result, and two lists, `to_check` and `expected_for_amplicons` |
+| `fastqc/` | The per-file FastQC reports |
+| `qc_log.txt` | Command, versions and results, appended on every run |
+
+**Four FastQC modules fail on nearly every amplicon library, and that is expected.**
+Per base sequence content, per sequence GC content, sequence duplication and
+overrepresented sequences all assume random fragments of one genome. Amplicon reads all
+start with the same primer and come from a mixed community. These go to
+`expected_for_amplicons`. Everything else that is not PASS goes to `to_check`: quality,
+N content, length and adapter content.
+
+The script reports what FastQC found and does not stop on data quality. Decisions based
+on quality, such as truncation lengths, belong to `02_quality`.
+
+### Guards
+
+Each one stops the run with a message, and each has a test in `tests/`.
+
+| Guard | Why |
+|---|---|
+| No FASTQ files is fatal | FastQC given no files opens its GUI and waits for ever |
+| An empty FASTQ is fatal | Nothing downstream should run on a zero-byte file |
+| Two inputs that map to one report name are fatal | `x.fastq` and `x.fastq.gz` would overwrite each other's report |
+| Every tool call has a time limit, and stdin is closed | A hung tool is killed along with anything it started |
+| One report per input, naming that input | A missing or mismatched report means FastQC skipped a file |
+| R1 and R2 of a run must hold the same number of reads | A pair that no longer matches breaks merging later |
+| MultiQC must write its report | Checked at the output boundary |
