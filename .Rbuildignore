@@ -8,5 +8,6 @@
 ^data-raw$
 ^scratch$
 ^results$
+^workflow$
 ^\.gitignore$
 ^\.gitattributes$

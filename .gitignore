@@ -30,6 +30,10 @@ data-raw/private/
 results/
 scratch/
 
+# Python
+__pycache__/
+.pytest_cache/
+
 # OS
 .DS_Store
 Thumbs.db
