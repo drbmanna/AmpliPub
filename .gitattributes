@@ -1,0 +1,9 @@
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.pdf binary
+*.qza binary
+*.qzv binary
+*.rds binary
+*.RData binary
