@@ -1,0 +1,35 @@
+# R
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+.Renviron
+*.Rproj
+inst/doc
+/doc/
+/Meta/
+docs/
+
+# renv
+renv/library/
+renv/local/
+renv/cellar/
+renv/staging/
+
+# QIIME 2 artifacts and sequence data. Never commit these.
+*.qza
+*.qzv
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.biom
+
+# Local data and results
+data-raw/private/
+results/
+scratch/
+
+# OS
+.DS_Store
+Thumbs.db

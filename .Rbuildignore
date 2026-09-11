@@ -1,0 +1,10 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^\.github$
+^LICENSE\.md$
+^README\.Rmd$
+^renv$
+^renv\.lock$
+^data-raw$
+^scratch$
+^results$
