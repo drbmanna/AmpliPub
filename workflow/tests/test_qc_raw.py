@@ -184,6 +184,18 @@ def test_lone_mate_is_fatal():
         qc.check_pairs(reports)
 
 
+def test_qiime_export_names_are_paired():
+    # Real names from `qiime tools export` of the dev demux.qza: the two mates of a
+    # sample carry different file numbers.
+    reports = [{"file": "SRR2143538_1_L001_R1_001.fastq.gz", "total_sequences": 5},
+               {"file": "SRR2143538_46_L001_R2_001.fastq.gz", "total_sequences": 5},
+               {"file": "SRR2143541_38_L001_R1_001.fastq.gz", "total_sequences": 7},
+               {"file": "SRR2143541_83_L001_R2_001.fastq.gz", "total_sequences": 6}]
+    with pytest.raises(qc.QCError, match="SRR2143541: 7 vs 6"):
+        qc.check_pairs(reports)
+    assert qc.check_pairs(reports[:2]) == 1
+
+
 def test_single_end_files_are_not_paired():
     reports = [{"file": "S1.fastq.gz", "total_sequences": 5},
                {"file": "S2.fastq.gz", "total_sequences": 7}]

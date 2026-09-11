@@ -8,7 +8,8 @@ Give it the paired-end demux.qza. The script
   3. parses cutadapt's report for every sample,
   4. checks one report came back per sample and that no reads were lost,
   5. writes a per-sample table of reads in, reads with primer, and reads out,
-  6. logs the command, versions and results.
+  6. runs 00_qc_raw.py on the trimmed reads, only if any read was trimmed,
+  7. logs the command, versions and results.
 
 Cutadapt always runs. When the reads carry no primers (for example, the submitter
 removed them) nothing is cut and the reads come out unchanged, which the report shows.
@@ -57,6 +58,7 @@ FIELDS = {
 }
 ABSENT_BELOW = 1.0   # percent of reads with a primer, in every sample
 PRESENT_ABOVE = 90.0
+QC_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "00_qc_raw.py")
 
 log = logging.getLogger("primers")
 
@@ -217,6 +219,23 @@ def check_output(out_qza: str, samples: set[str]) -> None:
         raise PrimerError(f"trimmed artifact has a different sample set, e.g. {diff[0]}")
 
 
+def qc_trimmed(out_qza: str, outdir: str, args) -> str:
+    """Export the trimmed reads and run 00_qc_raw.py on them. Returns the report path."""
+    fastq_dir = os.path.join(outdir, "trimmed_fastq")
+    rc, _, err = run_cmd(["conda", "run", "-n", args.env, "qiime", "tools", "export",
+                          "--input-path", out_qza, "--output-path", fastq_dir], args.timeout)
+    if rc != 0:
+        raise PrimerError(f"qiime tools export exited with code {rc}:\n{_tail(err)}")
+    qc_dir = os.path.join(outdir, "qc_trimmed")
+    # 00_qc_raw applies its own limit to FastQC and to MultiQC.
+    rc, _, err = run_cmd([sys.executable, QC_SCRIPT, "-i", fastq_dir, "-o", qc_dir,
+                          "--env", args.qc_env, "--timeout", str(args.timeout)],
+                         2 * args.timeout + 600)
+    if rc != 0:
+        raise PrimerError(f"trimmed-read QC failed, see {qc_dir}/qc_log.txt:\n{_tail(err)}")
+    return os.path.join(qc_dir, "multiqc_report.html")
+
+
 def setup_logging(outdir: str | None) -> None:
     log.setLevel(logging.INFO)
     log.handlers.clear()
@@ -241,6 +260,8 @@ def parse_args(argv):
                    help="drop pairs where a primer was not found (only for reads that carry primers)")
     p.add_argument("--cores", type=int, default=4, help="CPU cores for cutadapt (default 4)")
     p.add_argument("--env", default="qiime2-amplicon-2025.7", help="conda env with QIIME 2")
+    p.add_argument("--qc-env", default="amplipub-qc",
+                   help="conda env with FastQC and MultiQC, for QC of trimmed reads")
     p.add_argument("--timeout", type=int, default=7200,
                    help="seconds before cutadapt is killed (default 7200)")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -287,6 +308,13 @@ def run(args) -> None:
              sum(r["r2_with_primer"] for r in rows), pct(sum(r["r2_with_primer"] for r in rows), pairs_in))
     verdict = interpret(rows)
     (log.warning if verdict.startswith("MIXED") else log.info)("%s", verdict)
+    trimmed = sum(r["r1_with_primer"] + r["r2_with_primer"] for r in rows)
+    if trimmed == 0:
+        log.info("no reads trimmed: the reads are unchanged, so the raw-read QC applies. "
+                 "Trimmed-read QC skipped")
+    else:
+        log.info("%d reads trimmed: running QC on the trimmed reads", trimmed)
+        log.info("trimmed-read QC: %s", qc_trimmed(out_qza, outdir, args))
     log.info("done: %s", out_qza)
 
 

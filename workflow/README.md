@@ -170,6 +170,12 @@ every read of primer-free data.
 | `primer_summary.tsv` | One row per sample: pairs in, R1 and R2 with primer, pairs out, and percentages |
 | `cutadapt_report.log` | Cutadapt's full report for every sample |
 | `primers_log.txt` | Command, versions, and a one-line verdict: primers absent, present, or mixed |
+| `qc_trimmed/`, `trimmed_fastq/` | Only when at least one read was trimmed: the trimmed reads exported, and `00_qc_raw.py` run on them |
+
+**QC after trimming runs only when trimming changed something.** If no read was trimmed,
+the reads are identical to the raw reads, the raw-read QC from `00_qc_raw.py` applies,
+and the log says the second QC was skipped. `--qc-env` names the QC environment,
+default `amplipub-qc`.
 
 ### Guards
 

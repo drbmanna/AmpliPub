@@ -51,7 +51,11 @@ EXPECTED_FOR_AMPLICONS = (
     "Overrepresented sequences",
 )
 STATUSES = ("PASS", "WARN", "FAIL")
-PAIR_RE = re.compile(r"^(?P<run>.+)_(?P<mate>[12])$")
+# SRA names (SRR1_1, SRR1_2), and Casava names as QIIME 2 exports them. QIIME numbers
+# every file, so the two mates of one sample carry different numbers
+# (S1_1_L001_R1_001, S1_46_L001_R2_001); the number is not part of the pairing key.
+PAIR_RES = (re.compile(r"^(?P<run>.+)_\d+_L\d{3}_R(?P<mate>[12])_001$"),
+            re.compile(r"^(?P<run>.+)_(?P<mate>[12])$"))
 TOTAL_RE = re.compile(r"^Total Sequences\t(\d+)\s*$", re.MULTILINE)
 MULTIQC_COMMENT = (
     "Per base sequence content, per sequence GC content, sequence duplication and "
@@ -193,7 +197,8 @@ def check_pairs(reports: list[dict]) -> int:
     """R1 and R2 of a run must hold the same number of reads. Returns the pair count."""
     mates: dict[str, dict[str, int]] = defaultdict(dict)
     for r in reports:
-        m = PAIR_RE.match(stem(r["file"]))
+        s = stem(r["file"])
+        m = next((m for m in (p.match(s) for p in PAIR_RES) if m), None)
         if m:
             mates[m.group("run")][m.group("mate")] = r["total_sequences"]
     lone = sorted(run for run, d in mates.items() if len(d) != 2)

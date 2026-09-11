@@ -58,17 +58,23 @@ def mapping(samples):
 class FakeRunner:
     """Stands in for pr.run_cmd. Writes trimmed.qza and returns cutadapt reports."""
 
-    def __init__(self, samples, reports=None, rc=0, write_output=True, out_samples=None):
+    def __init__(self, samples, reports=None, rc=0, write_output=True, out_samples=None,
+                 qc_rc=0):
         self.samples = samples
         self.reports = reports
         self.rc = rc
         self.write_output = write_output
         self.out_samples = out_samples or samples
+        self.qc_rc = qc_rc
         self.calls = []
 
     def __call__(self, cmd, timeout):
         self.calls.append(cmd)
         assert timeout > 0
+        if "export" in cmd:
+            return 0, "", ""
+        if pr.QC_SCRIPT in cmd:
+            return self.qc_rc, "", "ERROR   no FASTQ files\n" if self.qc_rc else ""
         if self.write_output:
             make_qza(cmd[cmd.index("--o-trimmed-sequences") + 1], self.out_samples)
         reports = self.reports
@@ -211,6 +217,34 @@ def test_output_with_different_samples_is_fatal(monkeypatch, tmp_path, caplog):
     runner = FakeRunner(["S1", "S2"], out_samples=["S1"])
     assert run_main(monkeypatch, tmp_path, runner, ["S1", "S2"]) == 1
     assert "different sample set" in caplog.text
+
+
+# Trimmed-read QC runs only when something was trimmed
+
+def test_nothing_trimmed_skips_trimmed_qc(monkeypatch, tmp_path, caplog):
+    runner = FakeRunner(["S1", "S2"])
+    assert run_main(monkeypatch, tmp_path, runner, ["S1", "S2"]) == 0
+    assert len(runner.calls) == 1
+    assert "Trimmed-read QC skipped" in caplog.text
+
+
+def test_trimmed_reads_get_qc(monkeypatch, tmp_path, caplog):
+    reports = block("S1", 0, 1000, r1=980, r2=975)
+    runner = FakeRunner(["S1"], reports=reports)
+    assert run_main(monkeypatch, tmp_path, runner, ["S1"]) == 0
+    export, qc_call = runner.calls[1], runner.calls[2]
+    assert export[4:7] == ["qiime", "tools", "export"]
+    out = tmp_path / "out"
+    assert qc_call[qc_call.index("-i") + 1] == str(out / "trimmed_fastq")
+    assert qc_call[qc_call.index("-o") + 1] == str(out / "qc_trimmed")
+    assert "1955 reads trimmed" in caplog.text
+
+
+def test_trimmed_qc_failure_is_fatal(monkeypatch, tmp_path, caplog):
+    reports = block("S1", 0, 1000, r1=980, r2=975)
+    runner = FakeRunner(["S1"], reports=reports, qc_rc=1)
+    assert run_main(monkeypatch, tmp_path, runner, ["S1"]) == 1
+    assert "trimmed-read QC failed" in caplog.text
 
 
 # Results
