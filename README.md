@@ -1,30 +1,55 @@
 # AmpliPub
 
-Publication-grade statistics and figures for amplicon sequencing data.
+From raw amplicon reads to publication-grade statistics and figures, in one reproducible
+project.
 
-**Status: early development. Not yet usable. The API will change.**
+**Status: early development.** The first stages run today. Most of the pipeline and the
+whole R statistics layer are still being built, and the interface will change.
 
 ## Why
 
-Getting from a feature table to a submittable figure means writing the same few hundred
-lines of `vegan` and `ggplot2` code on every project. Most people write it once, write it
-differently the next time, and cannot reproduce either version a year later.
+A 16S analysis usually means QIIME 2 in one place, R in another, statistics in a third,
+and plotting in a fourth. To make life simple, AmpliPub runs all of it as one project:
 
-The statistics have a second problem. Several of the tests that peer review expects
-depend on assumptions that are rarely checked. PERMANOVA is the clearest case: a
-significant result can mean the groups differ in location, or that one group is simply
-more variable. Reporting it without the accompanying dispersion test leaves that
-ambiguity unresolved, and it is left unresolved in a great many published analyses.
+- Downloads reads from a single accession and checks that every file arrived intact.
+- Runs read QC and QIIME 2 processing, and stops when a step fails silently.
+- Runs the statistics with the checks each test needs, such as a dispersion test with
+  every PERMANOVA.
+- Produces figures ready to submit, and a methods draft from the analysis that ran.
+- Logs every step, so the analysis can be rerun.
 
-AmpliPub runs the tests, checks the assumptions they depend on, and produces figures that
-are ready to submit.
+## How it fits together
 
-## What it does
+```
+accession -> FASTQ -> read QC -> QIIME 2 processing -> feature table -> statistics -> figures
+```
 
-Input is a feature table (OTU, ASV, or gene counts) plus sample metadata. Source does not
-matter: QIIME 2, DADA2, mothur, or anything else that yields a table.
+| Stage | What runs | Status |
+|---|---|---|
+| Download | `workflow/00_fetch_sra.py`: one accession in, verified FASTQ, sample metadata, and a QIIME 2 manifest out | Built, tested |
+| Environments | `workflow/setup_envs.sh`: the QIIME 2 amplicon 2025.7 release plus a pinned QC environment | Built |
+| Read QC | FastQC and MultiQC, before and after primer removal | In progress |
+| Primer removal | QIIME 2 (cutadapt) | Planned |
+| Quality and truncation | QIIME 2 quality profiles, with an overlap check before reads are merged | Planned |
+| Denoising | QIIME 2 (DADA2), with a read retention check per library | Planned |
+| Mock community check | Recovered sequences compared with a community of known composition | Planned |
+| Taxonomy and tree | QIIME 2 | Planned |
+| Statistics and figures | AmpliPub R package | Planned |
 
-Planned scope:
+QIIME 2 does the sequence processing, and AmpliPub does not reimplement it. What AmpliPub
+adds around it is getting data in from a single accession, QC reports, and checks that stop
+the run on failures that otherwise pass silently: reads that no longer overlap enough to
+merge, libraries that lose most of their reads, a mock community that does not come back.
+
+Already have a table from another pipeline? Start at the feature table. The R package
+takes any OTU, ASV, or gene count table plus sample metadata, whether it came from
+QIIME 2, DADA2, mothur, or anything else.
+
+The pipeline is being built one stage at a time on a public dataset (Baxter et al. 2016)
+that includes mock community samples, so each stage can be checked against a known answer.
+`R CMD check` runs on every push.
+
+## Planned statistics layer
 
 - **Data and metadata assessment.** Sparsity, depth, and library size. Detection of
   repeated measures, batch variables, and candidate confounders, which determine whether
@@ -42,16 +67,17 @@ Planned scope:
 - **Reporting.** Figures built with `ggplot2`, `ggsci`, and `ggpubr`. A methods draft
   populated from the analysis that actually ran. A STORMS checklist.
 
-## Scope boundaries
-
-AmpliPub starts at the feature table. Upstream sequence processing is out of scope:
-primer removal, denoising, chimera filtering, and taxonomy assignment belong to QIIME 2,
-DADA2, or an equivalent, and should be done before anything here is run. Results are only
-as good as that upstream work.
-
 ## Installation
 
-Not yet. There is nothing to install.
+The R package has nothing to install yet.
+
+The workflow runs on Linux or WSL and needs conda:
+
+```bash
+bash workflow/setup_envs.sh
+```
+
+See [workflow/README.md](workflow/README.md) for each stage.
 
 ## License
 

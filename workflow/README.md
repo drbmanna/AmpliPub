@@ -3,6 +3,17 @@
 Staged scripts that run upstream of the AmpliPub R package, in WSL or Linux. They are
 not part of the package build.
 
+## Setup
+
+```bash
+bash workflow/setup_envs.sh
+```
+
+Creates two conda environments. `qiime2-amplicon-2025.7` comes from the official QIIME 2
+release file. `amplipub-qc` holds FastQC and MultiQC, pinned in `envs/qc.yml`. The QC
+tools stay out of the QIIME 2 environment so the release environment is never modified.
+Rerunning is safe: existing environments are only checked, not rebuilt.
+
 ## 00_fetch_sra.py
 
 Downloads raw FASTQ for a public accession and writes a QIIME 2 manifest. Standard
