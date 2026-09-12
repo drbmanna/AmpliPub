@@ -11,3 +11,5 @@
 ^workflow$
 ^\.gitignore$
 ^\.gitattributes$
+^\.pytest_cache$
+^analysis$
