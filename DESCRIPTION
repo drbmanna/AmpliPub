@@ -39,6 +39,11 @@ Imports:
     utils,
     vegan
 Suggests:
+    ggrepel,
+    ALDEx2,
+    ANCOMBC,
+    Maaslin2,
+    MicrobiomeStat,
     lme4,
     withr,
     zip,
