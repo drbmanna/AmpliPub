@@ -304,3 +304,49 @@ reports say so rather than calling it a merge rate.
 | An empty feature table is fatal | The most common catastrophic 16S failure, and it does not raise an error on its own |
 | The stats table must have the paired-end columns, in order, all numeric | A single-end input or a changed format would give wrong percentages silently |
 | `denoise-paired` must exit zero and write all three artifacts | An exit code alone does not prove the outputs exist |
+
+## 04_mock.py
+
+Compares the ASVs recovered from mock community samples with a reference of known
+composition. Runs in the QIIME 2 environment. Standard library Python 3.8 or later.
+
+```bash
+python workflow/04_mock.py -b ~/research/baxter2016/q2/dada2/table.qza -r ~/research/baxter2016/q2/dada2/rep_seqs.qza -m ~/research/baxter2016/ref/HMP_MOCK.v35.fasta -s mock1,mock2,mock5,mock6,mock7 -o ~/research/baxter2016/q2/mock
+```
+
+**This stage reports. It does not pass or fail.** No published source sets an acceptance
+threshold for a mock community, so the numbers are printed with published figures beside
+them and the reader judges. Kozich et al. 2013 and Callahan et al. 2016 are quoted in the
+log, labelled as comparisons and not as thresholds, with a note that OTUs and ASVs are
+not the same unit.
+
+The reference is not assumed to be pre-trimmed. The script finds the forward primer and
+the reverse complement of the reverse primer in each record, takes what lies between
+them, and collapses the results, because different strains can share one V4 sequence and
+would otherwise be counted as several targets that could never all be recovered.
+`--max-primer-mismatch` rescues a record whose primer site is not exact; those records are
+named in the log, since a mismatched primer site can mean the template amplifies poorly
+and a missing target is then not the pipeline's fault.
+
+**Two limits, stated rather than buried.** The mismatch rate is counted against the
+nearest reference of the *same length*. It is not mothur's `seq.error`, which aligns
+first, so do not report it under that name. An ASV with an insertion or deletion has no
+same-length reference and is counted separately instead of being quietly dropped.
+
+| Option | Meaning |
+|---|---|
+| `-s`, `--mock-samples` | Comma-separated sample ids, or a file with one per line |
+| `--primer-f`, `--primer-r` | Primers, default 515F and 806R |
+| `--max-primer-mismatch N` | Mismatches allowed per primer site in the reference, default 1. Exact sites always win |
+| `--low-depth-note N` | Log a note for any mock sample below N reads. Default 0, off, so no threshold is implied |
+| `--timeout S` | Seconds before an export step is killed, default 3600 |
+
+### Outputs
+
+| File | Contents |
+|---|---|
+| `targets.tsv` | Every distinct target sequence, the reference names that produce it, and any record with no region found |
+| `mock_summary.tsv` | Per sample: reads, ASVs, targets recovered exactly, spurious ASVs and their read share, mismatch rate |
+| `mock_missing_targets.tsv` | Which targets were not recovered exactly, by sample |
+| `mock_other_asvs.tsv` | Every ASV that is not an exact target, with its reads and distance to the nearest same-length reference |
+| `mock_log.txt` | Command, versions, the reference breakdown, per-sample numbers, and the published comparisons |
