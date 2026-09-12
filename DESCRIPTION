@@ -24,14 +24,20 @@ Imports:
     Biostrings,
     biomformat,
     cli,
+    ggplot2,
+    grDevices,
+    Matrix,
     methods,
+    rlang,
     S4Vectors,
+    scales,
     stats,
     SummarizedExperiment,
     tools,
     TreeSummarizedExperiment,
     utils
 Suggests:
+    lme4,
     withr,
     zip,
     testthat (>= 3.0.0)
