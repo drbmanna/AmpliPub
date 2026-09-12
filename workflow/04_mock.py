@@ -74,18 +74,24 @@ __version__ = "0.1.0"
 PRIMER_F = "GTGCCAGCMGCCGCGGTAA"      # 515F
 PRIMER_R = "GGACTACHVGGGTWTCTAAT"     # 806R, found as its reverse complement
 
-IUPAC = {"A": "A", "C": "C", "G": "G", "T": "T",
-         "R": "AG", "Y": "CT", "S": "CG", "W": "AT", "K": "GT", "M": "AC",
-         "B": "CGT", "D": "AGT", "H": "ACT", "V": "ACG", "N": "ACGT"}
-COMPLEMENT = {"A": "T", "C": "G", "G": "C", "T": "A",
-              "R": "Y", "Y": "R", "S": "S", "W": "W", "K": "M", "M": "K",
-              "B": "V", "V": "B", "D": "H", "H": "D", "N": "N"}
+# The region logic lives in amplicon_regions.py so this stage and 06_resolution.py
+# share one tested implementation. A script run by path has its own directory on
+# sys.path already; this makes that explicit rather than relying on it.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from amplicon_regions import (  # noqa: E402
+    IUPAC, COMPLEMENT, RegionError, revcomp, read_fasta, mismatches, find_primer,
+    extract_region, group_by_region, hamming, nearest_same_length,
+)
+
+# 04_mock speaks of reference targets, 06_resolution of collapse groups. Same function.
+build_targets = group_by_region
 
 log = logging.getLogger("mock")
 
 
-class MockError(RuntimeError):
-    """A check failed. The message says which one and why."""
+# One error class for the whole stage, shared with the region helpers, so every check
+# reaches the same handler and the same exit code.
+MockError = RegionError
 
 
 def run_cmd(cmd: list[str], timeout: int) -> tuple[int, str, str]:
@@ -114,110 +120,12 @@ def _tail(text: str, n: int = 15) -> str:
 
 # ---- sequence helpers ----------------------------------------------------
 
-def revcomp(seq: str) -> str:
-    try:
-        return "".join(COMPLEMENT[b] for b in reversed(seq.upper()))
-    except KeyError as exc:
-        raise MockError(f"cannot complement base {exc.args[0]!r} in {seq!r}") from exc
 
 
-def read_fasta(path: str) -> dict[str, str]:
-    """Read a FASTA file. Duplicate names are an error, not a silent overwrite."""
-    records: dict[str, str] = {}
-    name = None
-    parts: list[str] = []
-    with open(path) as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            if line.startswith(">"):
-                if name is not None:
-                    records[name] = "".join(parts).upper()
-                name = line[1:].split()[0]
-                if name in records:
-                    raise MockError(f"{path}: {name} appears more than once")
-                parts = []
-            else:
-                if name is None:
-                    raise MockError(f"{path}: sequence data before the first header")
-                parts.append(line)
-    if name is not None:
-        records[name] = "".join(parts).upper()
-    if not records:
-        raise MockError(f"{path}: no sequences")
-    return records
 
 
-def mismatches(primer: str, window: str) -> int:
-    """Count positions where the window does not satisfy the primer's IUPAC code."""
-    n = 0
-    for p, b in zip(primer, window):
-        allowed = IUPAC.get(p)
-        if allowed is None:
-            raise MockError(f"{p!r} is not a IUPAC code in primer {primer!r}")
-        if b not in allowed:
-            n += 1
-    return n
 
 
-def find_primer(seq: str, primer: str, max_mismatch: int) -> tuple[int, int] | None:
-    """Leftmost window matching the primer within max_mismatch. Returns (start, end)."""
-    width = len(primer)
-    best = None
-    for i in range(len(seq) - width + 1):
-        m = mismatches(primer, seq[i:i + width])
-        if m == 0:
-            return i, i + width
-        if m <= max_mismatch and best is None:
-            best = (i, i + width)
-    return best
-
-
-def extract_region(seq: str, fwd: str, rev: str, max_mismatch: int) -> str | None:
-    """The sequence between the forward primer and the reverse primer's complement."""
-    f = find_primer(seq, fwd, max_mismatch)
-    if f is None:
-        return None
-    r = find_primer(seq[f[1]:], revcomp(rev), max_mismatch)
-    if r is None:
-        return None
-    return seq[f[1]:f[1] + r[0]]
-
-
-def build_targets(records: dict[str, str], fwd: str, rev: str,
-                  max_mismatch: int) -> tuple[dict[str, list[str]], list[str]]:
-    """Map each distinct target sequence to the reference names that produce it.
-
-    Also returns the names where no primer pair was found at this mismatch budget.
-    """
-    targets: dict[str, list[str]] = {}
-    missing = []
-    for name, seq in records.items():
-        region = extract_region(seq, fwd, rev, max_mismatch)
-        if region is None or not region:
-            missing.append(name)
-            continue
-        targets.setdefault(region, []).append(name)
-    if not targets:
-        raise MockError("no reference record yielded a region between the primers. "
-                        "Check the primers and the reference orientation")
-    return targets, missing
-
-
-def hamming(a: str, b: str) -> int:
-    if len(a) != len(b):
-        raise MockError(f"hamming needs equal lengths, got {len(a)} and {len(b)}")
-    return sum(1 for x, y in zip(a, b) if x != y)
-
-
-def nearest_same_length(seq: str, targets: list[str]) -> tuple[int, int] | None:
-    """Fewest differing positions against any target of the same length, and its length."""
-    same = [t for t in targets if len(t) == len(seq)]
-    if not same:
-        return None
-    best = min(hamming(seq, t) for t in same)
-    return best, len(seq)
 
 
 # ---- QIIME 2 artifacts ---------------------------------------------------

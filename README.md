@@ -34,6 +34,7 @@ accession -> FASTQ -> read QC -> QIIME 2 processing -> feature table -> statisti
 | Denoising | `workflow/03_dada2.py`: QIIME 2 (DADA2), with read retention checked per library against pre-registered criteria | Built, not yet run on a full dataset |
 | Mock community check | `workflow/04_mock.py`: recovered sequences compared with a community of known composition, reported against published figures | Built, not yet run on a full dataset |
 | Taxonomy | `workflow/05_taxonomy.py`: QIIME 2 classifiers, with a disagreement rate between two references reported per rank | Built, not yet run on a full dataset |
+| Region resolution | `workflow/06_resolution.py`: what a chosen amplicon region can and cannot tell apart, measured from the reference before sequencing | Built, tested |
 | Tree | QIIME 2 | Planned |
 | Statistics and figures | AmpliPub R package | Planned |
 

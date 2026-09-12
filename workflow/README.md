@@ -411,3 +411,72 @@ be traced back to the exact classifier that produced it.
 | Nothing placed at domain level is fatal | That is a broken classifier or the wrong region, not a hard dataset |
 | Every ASV in rep-seqs must be in the table, when one is given | Guards against mixing outputs from two different runs |
 | One classifier says so, instead of printing a comparison of nothing | An empty disagreement table would read as agreement |
+
+## 06_resolution.py
+
+Measures what an amplicon region can and cannot tell apart, from a reference database and
+a primer pair. No QIIME 2, no conda, no network, standard library only.
+
+```bash
+python workflow/06_resolution.py -m ~/research/baxter2016/ref/HMP_MOCK.v35.fasta -p v4=GTGCCAGCMGCCGCGGTAA,GGACTACHVGGGTWTCTAAT --full-length -o ~/research/baxter2016/resolution
+```
+
+**Why this exists.** Every 16S study picks a region and then reports species names. Almost
+none checks whether the chosen region can distinguish the species it is naming. Two
+organisms with an identical sequence over the amplified region are not hard to classify,
+they are impossible to classify apart, and no classifier, model or database fixes that.
+This stage measures it, and it can be run before sequencing rather than after.
+
+It reads both ways round. Choosing a region: run several primer pairs against one
+reference and compare counts. Reading a result: the ambiguity sets say which species-level
+calls are safe and which are one arbitrary pick from several equal candidates.
+
+**On the reference this project uses**, 32 records of the HMP mock:
+
+| region | records with a region | distinct sequences | collapse groups | records collapsed |
+|---|---|---|---|---|
+| V4, 515F/806R, 252-254 bp | 32 | 25 | 5 | 12 |
+| full length, 514-542 bp | 32 | 31 | 1 | 2 |
+
+V4 cannot separate *S. aureus* from *S. epidermidis*, nor three *B. vulgatus* variants,
+nor two each of *C. beijerinckii*, *E. faecalis* and *P. aeruginosa*. At full length only
+the two *E. faecalis* variants remain merged, and those are the same species. That is the
+concrete version of "longer reads resolve more", with numbers instead of assertion.
+
+**An ambiguity set is a property of the reference and the region, not of your samples.**
+If a set holds three species and your sample contains one of them, the call is still
+ambiguous, because nothing in the amplicon says which. Report the set.
+
+**A region this reference cannot answer for is reported as such, not as a region that
+resolves nothing.** Those are different facts and conflating them would be a wrong answer
+rather than a missing one. When no record yields a region, the log says which primer site
+is absent and in which orientation, because a reference trimmed to start inside the
+amplicon has lost its forward site and that says nothing about the region. One failing
+region never aborts a comparison; only every region failing is fatal.
+
+| Option | Meaning |
+|---|---|
+| `-p`, `--primers NAME=FWD,REV` | A region and its primer pair. Repeat to compare several |
+| `--full-length` | Also treat the whole record as a region, for comparison |
+| `-t`, `--taxonomy FILE` | Two-column id and taxon table, to resolve by rank and name the ambiguity sets |
+| `--max-primer-mismatch N` | Mismatches allowed per primer site, default 1. Exact sites always win |
+
+### Outputs
+
+| File | Contents |
+|---|---|
+| `resolution_summary.tsv` | Per region: records, distinct sequences, collapse groups, lengths, and per-rank resolved counts when a taxonomy is given |
+| `resolution_groups.tsv` | Every set of records that share one sequence, no taxonomy needed to read it |
+| `resolution_ambiguity_sets.tsv` | Per region and rank: the taxa that collapse together, and the records behind them |
+| `resolution_no_region.tsv` | Records yielding no region, per region |
+| `resolution_log.txt` | Command, versions, per-region and per-rank numbers, and the caveat |
+
+### Guards
+
+| Guard | Why |
+|---|---|
+| A record yielding no region is reported, never dropped | A mismatched primer site can mean poor amplification, a different fact from being indistinguishable |
+| A failing region is reported with the missing primer named | "No region found" alone blames the region for a property of the reference |
+| One failing region does not abort the comparison | Comparing regions is the entire purpose |
+| Every region failing is fatal | Nothing was measured, so there is no result to report |
+| Taxonomy ids that match no reference record are fatal | Otherwise every rank would silently report zero resolved |
