@@ -129,7 +129,7 @@ def test_repeated_classifier_name_fires():
         t.parse_classifiers(["gg2=/a.qza", "gg2=/b.qza"])
 
 
-# ---- coverage and disagreement ------------------------------------------
+# ---- coverage and label differences ------------------------------------------
 
 def test_coverage_counts_asvs_and_reads():
     tax = t.parse_taxonomy(taxonomy_tsv([("f1", GG, 0.99),
@@ -146,16 +146,39 @@ def test_coverage_without_reads_is_still_counted():
     assert cov["species"]["asv_fraction"] == 1.0 and cov["species"]["read_fraction"] == 0.0
 
 
-def test_disagreement_is_counted_only_where_both_named_it():
+def test_label_difference_is_counted_only_where_both_named_it():
     a = t.parse_taxonomy(taxonomy_tsv([("f1", GG, 0.9), ("f2", GG, 0.9)]), "a")
     b = t.parse_taxonomy(taxonomy_tsv([("f1", SILVA, 0.9),
                                        ("f2", "d__Bacteria", 0.9)]), "b")
-    d = t.disagreements(a, b)
+    d = t.label_differences(a, b)
     # same genus, different phylum naming, and only a names f2 below domain
-    assert d["genus"] == {"compared": 1, "differ": 0, "differ_fraction": 0.0,
+    assert d["genus"] == {"compared": 1, "different_label": 0, "different_label_fraction": 0.0,
                           "only_first": 1, "only_second": 0, "examples": []}
-    assert d["phylum"]["differ"] == 1 and d["phylum"]["compared"] == 1
-    assert d["species"]["differ"] == 0  # SILVA says uncultured, which is not a name
+    assert d["phylum"]["different_label"] == 1 and d["phylum"]["compared"] == 1
+    assert d["species"]["different_label"] == 0  # SILVA says uncultured, which is not a name
+
+
+def test_a_different_label_can_be_the_same_clade_renamed():
+    """The metric is a string comparison, and this is what that costs.
+
+    GG writes Bacillota, SILVA writes Firmicutes. Same phylum, renamed under the ICNP,
+    and it counts as a different label. On the real GG2-vs-SILVA run this drove the
+    phylum figure to 85%, essentially all of it nomenclature rather than placement.
+
+    Pinning it in a test so nobody reads the number as a placement conflict, and so
+    nobody is tempted to "fix" it with a synonym table that would silently miscount
+    every pair of vocabularies it does not know. The fix is to use one reference.
+    """
+    a = t.parse_taxonomy(taxonomy_tsv([("f1", GG, 0.9)]), "gg")
+    b = t.parse_taxonomy(taxonomy_tsv([("f1", SILVA, 0.9)]), "silva")
+    d = t.label_differences(a, b)
+    # Everything from class down is byte-identical between the two references.
+    for rank in ("class", "order", "family", "genus"):
+        assert d[rank]["different_label"] == 0, rank
+    # Only the phylum differs, and only because it was renamed.
+    assert d["phylum"]["different_label_fraction"] == 1.0
+    assert a["f1"]["ranks"]["phylum"] == "Bacillota"
+    assert b["f1"]["ranks"]["phylum"] == "Firmicutes"
 
 
 # ---- end to end ----------------------------------------------------------
@@ -217,8 +240,8 @@ def test_two_classifiers_end_to_end(tmp_path, monkeypatch):
     cov = list(csv.DictReader((out / "taxonomy_coverage.tsv").open(), delimiter="\t"))
     assert {r["classifier"] for r in cov} == {"gg2", "silva"}
     dis = {r["rank"]: r for r in
-           csv.DictReader((out / "taxonomy_disagreements.tsv").open(), delimiter="\t")}
-    assert dis["phylum"]["differ"] == "2" and dis["genus"]["differ"] == "0"
+           csv.DictReader((out / "taxonomy_label_differences.tsv").open(), delimiter="\t")}
+    assert dis["phylum"]["different_label"] == "2" and dis["genus"]["different_label"] == "0"
     calls = list(csv.DictReader((out / "taxonomy_calls.tsv").open(), delimiter="\t"))
     assert calls[0]["gg2_taxon"] == GG and calls[0]["silva_confidence"] == "0.95"
 
@@ -269,8 +292,8 @@ def test_one_classifier_says_so_instead_of_faking_a_comparison(tmp_path, monkeyp
                                                              ("f2", GG, 0.9)])})
     assert run_main(monkeypatch, tmp_path, runner, names=("gg2",)) == 0
     out = tmp_path / "out"
-    assert not (out / "taxonomy_disagreements.tsv").exists()
-    assert "no disagreement rate" in (out / "taxonomy_log.txt").read_text()
+    assert not (out / "taxonomy_label_differences.tsv").exists()
+    assert "one classifier, which is the default" in (out / "taxonomy_log.txt").read_text()
 
 
 def test_the_amplicon_ceiling_is_stated(tmp_path, monkeypatch):

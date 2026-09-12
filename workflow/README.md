@@ -414,16 +414,29 @@ same-length reference and is counted separately instead of being quietly dropped
 
 ## 05_taxonomy.py
 
-Classifies the ASVs against one or more reference taxonomies and reports where they
-disagree. Runs in the QIIME 2 environment. Standard library Python 3.8 or later.
+Classifies the ASVs against a reference taxonomy and reports how deep the names go. Runs
+in the QIIME 2 environment. Standard library Python 3.8 or later.
 
 ```bash
 python workflow/05_taxonomy.py -r ~/research/baxter2016/q2/dada2/rep_seqs.qza -b ~/research/baxter2016/q2/dada2/table.qza -c gg2=~/research/ref/classifiers/gg2-2024.09-v4.qza -c silva=~/research/ref/classifiers/silva-138-99-human-stool-weighted.qza -o ~/research/baxter2016/q2/taxonomy --n-jobs 4
 ```
 
-**Two classifiers, and not for the usual reason.** One taxonomy gives you names with no
-way to tell a confident call from a lucky one. Two give you a disagreement rate per rank,
-which turns an invisible assumption into a number that belongs in a methods section.
+**One reference is the default.** Pick it, pin its version, name it in the methods, and
+report `taxonomy_coverage.tsv`: the share of ASVs and of reads that get a name at each
+rank. That is the number a reader needs.
+
+**A second classifier is a diagnostic, not a better default.** It tells you, once, how
+much of your naming depends on the reference you chose. Two things to know before reading
+the output. It measures whether the two labels are the same string, not whether the two
+references place an organism differently: Greengenes2 writes GTDB names, so the phylum
+SILVA calls `Firmicutes` it calls `Bacillota_A_368345`, and that counts as a different
+label while naming the same clade. On the real GG2-vs-SILVA run here that put the phylum
+figure at 85%, essentially all of it nomenclature. And running two references routinely
+reintroduces exactly the naming problem that choosing one removes at the source.
+
+No synonym table is applied. A partial one would silently miscount every pair of
+vocabularies it did not know, and claiming agreement we cannot establish is worse than a
+number that says plainly what it measures.
 
 **The ceiling is the fragment, not the classifier.** 253 bp of V4 does not carry
 species-level information for many taxa. In the mock reference used by this project,
@@ -458,10 +471,10 @@ be traced back to the exact classifier that produced it.
 |---|---|
 | `taxonomy_<name>.qza` | The classification artifact from each classifier |
 | `taxonomy_coverage.tsv` | Per classifier and rank: ASVs named, and the share of ASVs and of reads |
-| `taxonomy_disagreements.tsv` | Per pair and rank: how many features both named, how many differently, and how many only one of them named |
+| `taxonomy_label_differences.tsv` | Only when two or more classifiers are given. Per pair and rank: how many features both named, how many carry a different label, and how many only one named. A string comparison, not a placement conflict |
 | `taxonomy_calls.tsv` | One row per ASV, one pair of columns per classifier: the taxon and its confidence |
 | `taxonomy_mock_calls.tsv` | Reference target, its exact-match ASV, and each classifier's call |
-| `taxonomy_log.txt` | Command, versions, each classifier's UUID, coverage, disagreement, and the amplicon-ceiling note |
+| `taxonomy_log.txt` | Command, versions, each classifier's UUID, coverage, any label differences, and the amplicon-ceiling note |
 
 ### Guards
 
@@ -471,7 +484,7 @@ be traced back to the exact classifier that produced it.
 | Every ASV must get a taxonomy row | A silent join failure would drop features from the report rather than raising |
 | Nothing placed at domain level is fatal | That is a broken classifier or the wrong region, not a hard dataset |
 | Every ASV in rep-seqs must be in the table, when one is given | Guards against mixing outputs from two different runs |
-| One classifier says so, instead of printing a comparison of nothing | An empty disagreement table would read as agreement |
+| One classifier says so, instead of printing a comparison of nothing | An empty comparison table would read as agreement |
 
 ## 06_resolution.py
 

@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
-"""Classify ASVs against one or more reference taxonomies, and compare what they say.
+"""Classify ASVs against a reference taxonomy and report how deep the names go.
 
-Give it the sequences from 03_dada2.py and one or more trained classifiers. The script
+Give it the sequences from 03_dada2.py and a trained classifier. The script
 
   1. checks each classifier really is a TaxonomicClassifier before spending compute,
   2. runs qiime feature-classifier classify-sklearn for each one,
   3. reports how deep each one classifies, by ASV and by read,
-  4. reports where two classifiers disagree, rank by rank,
+  4. optionally, if given a second classifier, reports where their labels differ,
   5. optionally lists what each one called the mock community's exact-match ASVs.
 
-**Two classifiers are better than one here, and not for the usual reason.** A single
-taxonomy gives you names with no way to tell a confident call from a lucky one. Running
-two and reporting the disagreement rate per rank turns an invisible assumption into a
-number you can put in a methods section.
+**One reference is the default, and it should be.** Pick a reference, pin its version,
+name it in the methods, and report the coverage table: the fraction of ASVs, and of
+reads, that receive a name at each rank. That is the number a reader needs, and it is
+what this stage produces when you pass a single classifier.
+
+**A second classifier is a diagnostic, not a better default.** Comparing two references
+tells you how much of your naming depends on the reference you chose, which is worth
+knowing once. It is not a routine part of an analysis, and the comparison measures less
+than it appears to: see `label_differences` below. Running two references as standard
+also reintroduces the nomenclature problem that choosing one removes at the source.
 
 **The ceiling is the fragment, not the classifier.** 253 bp of V4 does not carry
 species-level information for many taxa. The reference work for this project found that
@@ -230,8 +236,24 @@ def coverage(tax: dict[str, dict], reads: dict[str, float] | None) -> dict[str, 
     return out
 
 
-def disagreements(a: dict[str, dict], b: dict[str, dict]) -> dict[str, dict]:
-    """Per rank: of the features both name, how often do they name it differently."""
+def label_differences(a: dict[str, dict], b: dict[str, dict]) -> dict[str, dict]:
+    """Per rank: of the features both name, how often is the label not the same string.
+
+    This is a string comparison and nothing more. It does NOT measure how often two
+    references place an organism differently, and it must not be reported as if it did.
+
+    Greengenes2 writes GTDB names, so the phylum SILVA calls Firmicutes it calls
+    Bacillota_A_368345. Those are the same clade under two nomenclatures, and they count
+    here as a different label. On a real GG2-vs-SILVA run that put the figure at 85% at
+    phylum, essentially all of it naming rather than placement.
+
+    Resolving nomenclature would need a curated synonym table mapping every pair of
+    reference vocabularies, kept current as they change. That is deliberately not done:
+    a partial table would silently miscount every pair it does not know, and claiming
+    agreement we cannot establish is worse than reporting a number that says what it is.
+
+    The fix at the source is to use one reference, which is this stage's default.
+    """
     out = {}
     for _, rank in RANKS:
         both = [f for f in a if f in b and rank in a[f]["ranks"] and rank in b[f]["ranks"]]
@@ -240,8 +262,8 @@ def disagreements(a: dict[str, dict], b: dict[str, dict]) -> dict[str, dict]:
                      (f not in b or rank not in b[f]["ranks"]))
         only_b = sum(1 for f in b if rank in b[f]["ranks"] and
                      (f not in a or rank not in a[f]["ranks"]))
-        out[rank] = {"compared": len(both), "differ": len(differ),
-                     "differ_fraction": len(differ) / len(both) if both else 0.0,
+        out[rank] = {"compared": len(both), "different_label": len(differ),
+                     "different_label_fraction": len(differ) / len(both) if both else 0.0,
                      "only_first": only_a, "only_second": only_b,
                      "examples": differ[:5]}
     return out
@@ -258,16 +280,17 @@ def write_coverage(path: str, per_classifier: dict[str, dict]) -> None:
                             round(c["reads"], 1), round(c["read_fraction"], 6)])
 
 
-def write_disagreements(path: str, pairs: dict[tuple[str, str], dict]) -> None:
+def write_label_differences(path: str, pairs: dict[tuple[str, str], dict]) -> None:
     with open(path, "w", newline="") as fh:
         w = csv.writer(fh, delimiter="\t", lineterminator="\n")
-        w.writerow(["first", "second", "rank", "compared", "differ", "differ_fraction",
+        w.writerow(["first", "second", "rank", "compared", "different_label",
+                    "different_label_fraction",
                     "named_only_by_first", "named_only_by_second"])
         for (a, b), per_rank in pairs.items():
             for _, rank in RANKS:
                 d = per_rank[rank]
-                w.writerow([a, b, rank, d["compared"], d["differ"],
-                            round(d["differ_fraction"], 6),
+                w.writerow([a, b, rank, d["compared"], d["different_label"],
+                            round(d["different_label_fraction"], 6),
                             d["only_first"], d["only_second"]])
 
 
@@ -378,8 +401,8 @@ def setup_logging(outdir: str | None) -> None:
 
 def parse_args(argv):
     p = argparse.ArgumentParser(
-        description="Classify ASVs against one or more reference taxonomies and "
-                    "report where they disagree.")
+        description="Classify ASVs against a reference taxonomy and report how deep "
+                    "the names go. A second classifier is a diagnostic, not a default.")
     p.add_argument("-r", "--rep-seqs", required=True, help="ASV sequences, e.g. rep_seqs.qza")
     p.add_argument("-c", "--classifier", action="append", default=[], metavar="NAME=PATH",
                    help="a trained classifier and the name to report it under. "
@@ -482,20 +505,27 @@ def run(args) -> None:
     names = list(tax)
     for i, a in enumerate(names):
         for b in names[i + 1:]:
-            pairs[(a, b)] = disagreements(tax[a], tax[b])
+            pairs[(a, b)] = label_differences(tax[a], tax[b])
     if pairs:
-        write_disagreements(os.path.join(outdir, "taxonomy_disagreements.tsv"), pairs)
+        write_label_differences(os.path.join(outdir, "taxonomy_label_differences.tsv"), pairs)
+        log.info("more than one classifier given, so label differences are reported below. "
+                 "READ THESE AS STRING COMPARISONS, NOT AS PLACEMENT CONFLICTS: two "
+                 "references using different nomenclature (GTDB Bacillota_A_368345 vs "
+                 "Firmicutes) count as different here while naming the same clade")
         for (a, b), per_rank in pairs.items():
             for _, rank in RANKS:
                 d = per_rank[rank]
                 if d["compared"]:
-                    log.info("%s vs %s at %s: %d compared, %d differ (%.1f%%), "
-                             "named only by %s %d, only by %s %d", a, b, rank,
-                             d["compared"], d["differ"], 100 * d["differ_fraction"],
+                    log.info("%s vs %s at %s: %d compared, %d with a different label "
+                             "(%.1f%%), named only by %s %d, only by %s %d", a, b, rank,
+                             d["compared"], d["different_label"],
+                             100 * d["different_label_fraction"],
                              a, d["only_first"], b, d["only_second"])
     else:
-        log.info("only one classifier given, so there is no disagreement rate. Two make "
-                 "the confidence of a name measurable rather than assumed")
+        log.info("one classifier, which is the default and the right one for an analysis. "
+                 "The coverage table is the result to report: how deep the names go, by "
+                 "ASV and by read. Pass a second classifier only as a diagnostic, to see "
+                 "how much of the naming depends on the reference you chose")
 
     if args.mock_targets:
         targets = read_mock_targets(os.path.abspath(os.path.expanduser(args.mock_targets)))
