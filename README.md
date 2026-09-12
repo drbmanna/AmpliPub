@@ -37,6 +37,7 @@ accession -> FASTQ -> read QC -> QIIME 2 processing -> feature table -> statisti
 | Taxonomy | `workflow/05_taxonomy.py`: QIIME 2 classifiers, with a disagreement rate between two references reported per rank | Built, not yet run on a full dataset |
 | Region resolution | `workflow/06_resolution.py`: what a chosen amplicon region can and cannot tell apart, measured from the reference before sequencing | Built, tested |
 | Tree | `workflow/09_tree.py`: MAFFT, masking, FastTree and rooting, with the tips proved to cover the table | Built, tested |
+| Diversity | `workflow/10_diversity.py`: alpha and beta diversity with the rarefaction depth chosen from the data, and Good's coverage checked for degeneracy | Built, tested |
 | Statistics and figures | AmpliPub R package | Planned |
 
 QIIME 2 does the sequence processing, and AmpliPub does not reimplement it. What AmpliPub
