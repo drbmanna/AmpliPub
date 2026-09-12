@@ -31,7 +31,7 @@ ap_da_planted <- function(n_features = 60L, per = 20L, n_planted = 6L,
 
 test_that("the bias-corrected methods recover the planted features and stay specific", {
   skip_on_cran()
-  skip_if_not_installed("ANCOMBC")
+  skip_if_no_ancombc2()
   skip_if_not_installed("ALDEx2")
   skip_if_not_installed("MicrobiomeStat")
 
@@ -191,7 +191,7 @@ test_that("a bad reference level is refused, listing the real ones", {
 
 test_that("the consensus set is exactly the planted features", {
   skip_on_cran()
-  skip_if_not_installed("ANCOMBC")
+  skip_if_no_ancombc2()
   skip_if_not_installed("ALDEx2")
   skip_if_not_installed("MicrobiomeStat")
 

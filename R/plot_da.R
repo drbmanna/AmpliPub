@@ -112,9 +112,11 @@ ap_plot_da_effects <- function(concordance, features = NULL, max_features = 25L)
   ggplot2::ggplot(r, ggplot2::aes(x = .data$effect, y = .data$label,
                                   colour = .data$method)) +
     ggplot2::geom_vline(xintercept = 0, colour = "grey60", linewidth = 0.3) +
-    ggplot2::geom_errorbarh(ggplot2::aes(xmin = .data$lo, xmax = .data$hi),
-                            height = 0, linewidth = 0.4,
-                            position = ggplot2::position_dodge(width = 0.6)) +
+    # geom_errorbarh() is deprecated in ggplot2 4.0; the horizontal form is now
+    # geom_errorbar() with orientation = "y".
+    ggplot2::geom_errorbar(ggplot2::aes(xmin = .data$lo, xmax = .data$hi),
+                           orientation = "y", width = 0, linewidth = 0.4,
+                           position = ggplot2::position_dodge(width = 0.6)) +
     ggplot2::geom_point(size = 1.3, position = ggplot2::position_dodge(width = 0.6)) +
     ggplot2::facet_wrap(~ method, scales = "free_x", nrow = 1) +
     ap_scale_colour(length(unique(r$method)), guide = "none") +

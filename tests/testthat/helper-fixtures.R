@@ -112,3 +112,12 @@ ap_fixture_qza <- function(dir, type, format, files,
   zip::zip(out, files = uuid, root = dir, mode = "cherry-pick")
   out
 }
+
+# ANCOMBC lists mia and microbiome as hard runtime requirements for processing a
+# TreeSummarizedExperiment, but does not pull them in as installed dependencies.
+# `skip_if_not_installed("ANCOMBC")` therefore passes on a machine where
+# ancombc2() cannot actually run, the method gets skipped mid-test, and the
+# assertions about its results fail. Seen on CI. Guard on what is really needed.
+skip_if_no_ancombc2 <- function() {
+  for (p in c("ANCOMBC", "mia", "microbiome")) skip_if_not_installed(p)
+}

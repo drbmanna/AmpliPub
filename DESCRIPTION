@@ -44,6 +44,8 @@ Suggests:
     ANCOMBC,
     Maaslin2,
     MicrobiomeStat,
+    mia,
+    microbiome,
     lme4,
     withr,
     zip,
