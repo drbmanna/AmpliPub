@@ -32,10 +32,12 @@ accession -> FASTQ -> read QC -> QIIME 2 processing -> feature table -> statisti
 | Read QC | `workflow/00_qc_raw.py`: FastQC and MultiQC, before and after primer removal | Built, tested |
 | Primer removal | `workflow/01_primers.py`: QIIME 2 (cutadapt), anchored primers, reads counted in and out | Built, tested |
 | Quality and truncation | `workflow/02_quality.py`: QIIME 2 quality profiles, with an overlap check before reads are merged | Built, tested |
-| Denoising | `workflow/03_dada2.py`: QIIME 2 (DADA2), with read retention checked per library against pre-registered criteria | Built, not yet run on a full dataset |
-| Mock community check | `workflow/04_mock.py`: recovered sequences compared with a community of known composition, reported against published figures | Built, not yet run on a full dataset |
-| Taxonomy | `workflow/05_taxonomy.py`: QIIME 2 classifiers, with a disagreement rate between two references reported per rank | Built, not yet run on a full dataset |
+| Denoising | `workflow/03_dada2.py`: QIIME 2 (DADA2), with read retention checked per library against pre-registered criteria | Built, tested |
+| Mock community check | `workflow/04_mock.py`: recovered sequences compared with a community of known composition, reported against published figures | Built, tested |
+| Taxonomy | `workflow/05_taxonomy.py`: QIIME 2 classifiers, with a disagreement rate between two references reported per rank | Built, tested |
 | Region resolution | `workflow/06_resolution.py`: what a chosen amplicon region can and cannot tell apart, measured from the reference before sequencing | Built, tested |
+| Pool runs per sample | `workflow/07_collapse.py`: the runs of each sample pooled, with the read total proved unchanged | Built, tested |
+| Filtering | `workflow/08_filter.py`: taxonomy, sample and prevalence filters, with the cost of each reported | Built, tested |
 | Tree | `workflow/09_tree.py`: MAFFT, masking, FastTree and rooting, with the tips proved to cover the table | Built, tested |
 | Diversity | `workflow/10_diversity.py`: alpha and beta diversity with the rarefaction depth chosen from the data, and Good's coverage checked for degeneracy | Built, tested |
 | Statistics and figures | AmpliPub R package | Planned |
