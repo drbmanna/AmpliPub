@@ -30,6 +30,10 @@ data-raw/private/
 results/
 scratch/
 
+# Editor working directories
+.vscode/
+.idea/
+
 # Python
 __pycache__/
 .pytest_cache/
