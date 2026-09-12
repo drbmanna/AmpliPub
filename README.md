@@ -33,7 +33,8 @@ accession -> FASTQ -> read QC -> QIIME 2 processing -> feature table -> statisti
 | Quality and truncation | `workflow/02_quality.py`: QIIME 2 quality profiles, with an overlap check before reads are merged | Built, tested |
 | Denoising | `workflow/03_dada2.py`: QIIME 2 (DADA2), with read retention checked per library against pre-registered criteria | Built, not yet run on a full dataset |
 | Mock community check | `workflow/04_mock.py`: recovered sequences compared with a community of known composition, reported against published figures | Built, not yet run on a full dataset |
-| Taxonomy and tree | QIIME 2 | Planned |
+| Taxonomy | `workflow/05_taxonomy.py`: QIIME 2 classifiers, with a disagreement rate between two references reported per rank | Built, not yet run on a full dataset |
+| Tree | QIIME 2 | Planned |
 | Statistics and figures | AmpliPub R package | Planned |
 
 QIIME 2 does the sequence processing, and AmpliPub does not reimplement it. What AmpliPub

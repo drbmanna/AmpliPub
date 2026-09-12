@@ -350,3 +350,64 @@ same-length reference and is counted separately instead of being quietly dropped
 | `mock_missing_targets.tsv` | Which targets were not recovered exactly, by sample |
 | `mock_other_asvs.tsv` | Every ASV that is not an exact target, with its reads and distance to the nearest same-length reference |
 | `mock_log.txt` | Command, versions, the reference breakdown, per-sample numbers, and the published comparisons |
+
+## 05_taxonomy.py
+
+Classifies the ASVs against one or more reference taxonomies and reports where they
+disagree. Runs in the QIIME 2 environment. Standard library Python 3.8 or later.
+
+```bash
+python workflow/05_taxonomy.py -r ~/research/baxter2016/q2/dada2/rep_seqs.qza -b ~/research/baxter2016/q2/dada2/table.qza -c gg2=~/research/ref/classifiers/gg2-2024.09-v4.qza -c silva=~/research/ref/classifiers/silva-138-99-human-stool-weighted.qza -o ~/research/baxter2016/q2/taxonomy --n-jobs 4
+```
+
+**Two classifiers, and not for the usual reason.** One taxonomy gives you names with no
+way to tell a confident call from a lucky one. Two give you a disagreement rate per rank,
+which turns an invisible assumption into a number that belongs in a methods section.
+
+**The ceiling is the fragment, not the classifier.** 253 bp of V4 does not carry
+species-level information for many taxa. In the mock reference used by this project,
+*S. aureus.1* and *S. epidermidis.1/2* have identical V4 sequences, so no method separates
+them here. A low species-level rate is a property of the amplicon and the script says so
+in its log rather than leaving it to be read as a failure.
+
+**Mock calls are listed, not scored.** With `--mock-targets` pointing at `04_mock.py`'s
+`targets.tsv`, the script writes one row per reference target that is present as an exact
+ASV, with each classifier's call beside it. It does not mark them right or wrong: turning
+a reference name like `B.vulgatus.1` into a taxon string to compare against would mean
+inventing a mapping the script has no source for. Twenty-five rows is a table a person
+reads.
+
+Classifiers are **not** shipped with this repository. Get them from the QIIME 2 Library
+data resources, or build one for your own region with RESCRIPt. Verify the checksum the
+Library publishes, and keep the file: the log records the artifact's UUID so a result can
+be traced back to the exact classifier that produced it.
+
+| Option | Meaning |
+|---|---|
+| `-c`, `--classifier NAME=PATH` | A trained classifier and the name to report it under. Repeat for more than one |
+| `-b`, `--table` | Feature table, so coverage is also weighted by reads and not only by ASV |
+| `--mock-targets FILE` | `targets.tsv` from `04_mock.py` |
+| `--n-jobs N` | `classify-sklearn` jobs, default 1, always passed explicitly because that is QIIME 2's own default |
+| `--confidence F` | `classify-sklearn` confidence, default 0.7, which is also QIIME 2's |
+| `--timeout S` | Seconds before a classify step is killed, default 86400 |
+
+### Outputs
+
+| File | Contents |
+|---|---|
+| `taxonomy_<name>.qza` | The classification artifact from each classifier |
+| `taxonomy_coverage.tsv` | Per classifier and rank: ASVs named, and the share of ASVs and of reads |
+| `taxonomy_disagreements.tsv` | Per pair and rank: how many features both named, how many differently, and how many only one of them named |
+| `taxonomy_calls.tsv` | One row per ASV, one pair of columns per classifier: the taxon and its confidence |
+| `taxonomy_mock_calls.tsv` | Reference target, its exact-match ASV, and each classifier's call |
+| `taxonomy_log.txt` | Command, versions, each classifier's UUID, coverage, disagreement, and the amplicon-ceiling note |
+
+### Guards
+
+| Guard | Why |
+|---|---|
+| Every classifier must really be a `TaxonomicClassifier` | The wrong artifact type would otherwise be found out hours into a run |
+| Every ASV must get a taxonomy row | A silent join failure would drop features from the report rather than raising |
+| Nothing placed at domain level is fatal | That is a broken classifier or the wrong region, not a hard dataset |
+| Every ASV in rep-seqs must be in the table, when one is given | Guards against mixing outputs from two different runs |
+| One classifier says so, instead of printing a comparison of nothing | An empty disagreement table would read as agreement |
