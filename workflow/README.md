@@ -243,3 +243,64 @@ a median slightly. The exact table behind the decision is kept.
 | Truncated reads must overlap by the floor | Merging otherwise collapses without an error |
 | Median below the threshold at position 1 is fatal | Nothing usable would be left |
 | Both quality tables must exist, positions 1..N in order, every row complete | A single-end input or a malformed table would give a wrong length silently |
+
+## 03_dada2.py
+
+Denoises the trimmed paired reads with DADA2 and judges the run against criteria written
+down before it ran. Runs in the QIIME 2 environment. Standard library Python 3.8 or
+later.
+
+```bash
+python workflow/03_dada2.py -i ~/research/baxter2016/q2/primers/trimmed.qza -t ~/research/baxter2016/q2/quality/trunc_len.tsv -o ~/research/baxter2016/q2/dada2 --threads 12
+```
+
+**There is no published pass/fail threshold for a DADA2 run.** Six sources were checked
+on 2026-09-12: the DADA2 tutorial, the mothur MiSeq SOP, Kozich et al. 2013, Callahan et
+al. 2016, Estaki et al. 2020, and the QIIME 2 denoising tutorial. Every one reports what
+it observed and leaves the judgement to the reader. So this script hard-fails only where
+the output is wrong rather than merely poor, and flags everything else with the source
+quoted in the message. The criteria are written to `criteria.tsv` next to the results, so
+the run and the standard it was held to travel together.
+
+The two flag rules are the DADA2 tutorial's own words, made countable: "Outside of
+filtering, there should no step in which a majority of reads are lost." (sic) and "If
+most of your reads were removed as chimeric, upstream processing may need to be
+revisited." Loss inside filtering is never flagged, because the tutorial excludes it.
+
+`--p-n-threads` is always passed. QIIME 2's default is 1, so an unset value quietly runs
+single-threaded. `--p-trunc-len-f`, `--p-trunc-len-r` and `--p-min-overlap` come from
+`trunc_len.tsv`, so the overlap arithmetic and the run use the same numbers.
+
+**One semantic trap**, read out of `run_dada.R` in this build rather than assumed: in the
+paired track table `denoised` is `denoisedF`, the forward reads only. The drop from
+`denoised` to `merged` therefore carries reverse denoising as well as merging. The
+reports say so rather than calling it a merge rate.
+
+| Option | Meaning |
+|---|---|
+| `-t`, `--trunc-len FILE` | `trunc_len.tsv` from `02_quality.py` |
+| `--threads N` | DADA2 threads, default 1, always passed to QIIME 2 explicitly |
+| `--majority F` | Fraction that counts as the tutorial's "majority", default 0.5 |
+| `--allow-zero-read-samples` | Downgrade the zero-read library check to a flag. Recorded in `criteria.tsv` |
+| `--timeout S` | Seconds before `denoise-paired` is killed, default 86400 |
+
+### Outputs
+
+| File | Contents |
+|---|---|
+| `table.qza`, `rep_seqs.qza` | The feature table and the ASV sequences |
+| `denoising_stats.qza` | The QIIME 2 stats artifact as produced |
+| `dada2_stats.tsv` | Per sample: every count, the loss at each step, and the share of input retained |
+| `dada2_flags.tsv` | One row per sample and step that crossed the flag, with the counts behind it |
+| `criteria.tsv` | The criteria applied, with the source for each |
+| `dada2_log.txt` | Command, versions, parameters, pooled losses and every flag |
+
+### Guards
+
+| Guard | Why |
+|---|---|
+| Overlap is rechecked before the run starts | This is where the compute is spent; a bad length would otherwise cost hours and return a near-empty table |
+| A library with zero reads is fatal unless overridden | Silently carrying a dead sample through the analysis is worse than stopping |
+| An empty feature table is fatal | The most common catastrophic 16S failure, and it does not raise an error on its own |
+| The stats table must have the paired-end columns, in order, all numeric | A single-end input or a changed format would give wrong percentages silently |
+| `denoise-paired` must exit zero and write all three artifacts | An exit code alone does not prove the outputs exist |

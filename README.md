@@ -28,10 +28,10 @@ accession -> FASTQ -> read QC -> QIIME 2 processing -> feature table -> statisti
 |---|---|---|
 | Download | `workflow/00_fetch_sra.py`: one accession in, verified FASTQ, sample metadata, and a QIIME 2 manifest out | Built, tested |
 | Environments | `workflow/setup_envs.sh`: the QIIME 2 amplicon 2025.7 release plus a pinned QC environment | Built |
-| Read QC | FastQC and MultiQC, before and after primer removal | In progress |
-| Primer removal | QIIME 2 (cutadapt) | Planned |
-| Quality and truncation | QIIME 2 quality profiles, with an overlap check before reads are merged | Planned |
-| Denoising | QIIME 2 (DADA2), with a read retention check per library | Planned |
+| Read QC | `workflow/00_qc_raw.py`: FastQC and MultiQC, before and after primer removal | Built, tested |
+| Primer removal | `workflow/01_primers.py`: QIIME 2 (cutadapt), anchored primers, reads counted in and out | Built, tested |
+| Quality and truncation | `workflow/02_quality.py`: QIIME 2 quality profiles, with an overlap check before reads are merged | Built, tested |
+| Denoising | `workflow/03_dada2.py`: QIIME 2 (DADA2), with read retention checked per library against pre-registered criteria | Built, not yet run on a full dataset |
 | Mock community check | Recovered sequences compared with a community of known composition | Planned |
 | Taxonomy and tree | QIIME 2 | Planned |
 | Statistics and figures | AmpliPub R package | Planned |
