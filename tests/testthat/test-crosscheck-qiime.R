@@ -81,3 +81,73 @@ test_that("alpha metrics match QIIME 2 on the identical rarefied table", {
   p <- align(pick("faith_pd"), ap_read_qza(file.path(cm, "faith_pd_vector.qza")))
   expect_equal(p$ours, p$theirs, tolerance = 1e-6)
 })
+
+test_that("beta diversity distances match QIIME 2 on the identical rarefied table", {
+  dir <- skip_without_qiime_output(
+    "diversity/core_metrics/rarefied_table.qza",
+    "diversity/core_metrics/bray_curtis_distance_matrix.qza",
+    "diversity/core_metrics/jaccard_distance_matrix.qza",
+    "diversity/core_metrics/unweighted_unifrac_distance_matrix.qza",
+    "diversity/core_metrics/weighted_unifrac_distance_matrix.qza",
+    "tree/rooted_tree.qza"
+  )
+  cm <- file.path(dir, "diversity", "core_metrics")
+
+  rt <- ap_read_qza(file.path(cm, "rarefied_table.qza"))
+  tree <- ap_read_qza(file.path(dir, "tree/rooted_tree.qza"))
+  meta <- data.frame(dummy = rep("a", ncol(rt)), row.names = colnames(rt))
+  x <- ap_import(rt, meta, tree = tree)
+
+  b <- ap_beta(x, metrics = c("bray_curtis", "jaccard", "unweighted_unifrac",
+                              "weighted_unifrac", "weighted_normalized_unifrac"),
+               rarefy = FALSE)
+
+  compare <- function(ours, ref_file) {
+    theirs <- ap_read_qza(file.path(cm, ref_file))
+    ids <- intersect(attr(ours, "Labels"), attr(theirs, "Labels"))
+    expect_gt(length(ids), 100L)
+    list(ours = as.vector(as.matrix(ours)[ids, ids]),
+         theirs = as.vector(as.matrix(theirs)[ids, ids]))
+  }
+
+  p <- compare(b$distances$bray_curtis, "bray_curtis_distance_matrix.qza")
+  expect_equal(p$ours, p$theirs, tolerance = 1e-10)
+
+  p <- compare(b$distances$jaccard, "jaccard_distance_matrix.qza")
+  expect_equal(p$ours, p$theirs, tolerance = 1e-10)
+
+  # Our own UniFrac, built on the tip-by-edge index rather than taken from a
+  # package. Tolerance absorbs the float32 branch lengths in the Newick file.
+  p <- compare(b$distances$unweighted_unifrac, "unweighted_unifrac_distance_matrix.qza")
+  expect_equal(p$ours, p$theirs, tolerance = 1e-5)
+
+  # Which weighted form QIIME 2 reports is settled here rather than assumed:
+  # the raw one agrees and the normalised one does not.
+  raw <- compare(b$distances$weighted_unifrac, "weighted_unifrac_distance_matrix.qza")
+  expect_equal(raw$ours, raw$theirs, tolerance = 1e-5)
+
+  norm <- compare(b$distances$weighted_normalized_unifrac,
+                  "weighted_unifrac_distance_matrix.qza")
+  expect_gt(max(abs(norm$ours - norm$theirs)), 0.1)
+})
+
+test_that("PCoA variance explained matches QIIME 2", {
+  dir <- skip_without_qiime_output(
+    "diversity/core_metrics/bray_curtis_distance_matrix.qza",
+    "diversity/core_metrics/bray_curtis_pcoa_results.qza"
+  )
+  cm <- file.path(dir, "diversity", "core_metrics")
+
+  d <- ap_read_qza(file.path(cm, "bray_curtis_distance_matrix.qza"))
+  ref <- ap_read_qza(file.path(cm, "bray_curtis_pcoa_results.qza"))
+  ord <- ap_ordinate(d, method = "pcoa", k = 5L)
+
+  # QIIME reports proportion explained over positive eigenvalues, as we do.
+  expect_equal(ord$prop_explained[1:5], ref$prop_explained[1:5], tolerance = 1e-6)
+
+  # Axis signs are arbitrary in an eigendecomposition, so compare on magnitude.
+  ids <- intersect(rownames(ord$coords), rownames(ref$vectors))
+  for (ax in 1:3) {
+    expect_gt(abs(stats::cor(ord$coords[ids, ax], ref$vectors[ids, ax])), 0.9999)
+  }
+})

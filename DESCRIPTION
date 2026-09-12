@@ -33,9 +33,11 @@ Imports:
     scales,
     stats,
     SummarizedExperiment,
+    permute,
     tools,
     TreeSummarizedExperiment,
-    utils
+    utils,
+    vegan
 Suggests:
     lme4,
     withr,
