@@ -204,23 +204,47 @@ def test_exact_and_spurious_are_separated():
     off_by_two = "TT" + V4_A[2:]
     seqs = {"f1": V4_A, "f2": off_by_two, "f3": V4_A[:-1]}   # f3 is one base short
     counts = {"f1": 900.0, "f2": 100.0, "f3": 10.0}
-    r = m.score_sample(counts, seqs, targets)
+    r = m.score_sample(counts, seqs, targets, [3])
     assert r["targets_recovered"] == 1 and r["targets_total"] == 2
     assert r["other_asvs"] == 2
     assert r["other_read_fraction"] == pytest.approx(110 / 1010)
-    assert r["other_asvs_without_same_length_reference"] == 1   # f3
-    # only f2 is comparable: 2 mismatches over 80 positions, weighted by its reads
-    assert r["mismatch_rate_same_length"] == pytest.approx(2 / 80)
+    assert r["asvs_without_same_length_reference"] == 1   # f3
+    # f2 is 2 mismatches over 80 bases in 100 reads; the 900 exact reads are zero-error
+    # and belong in the denominator, so the rate is 200 / (8000 + 72000)
+    assert r["within"][3]["mismatch_rate"] == pytest.approx(200 / 80000)
+    assert r["within"][3]["mismatch_rate_variants_only"] == pytest.approx(2 / 80)
+    assert r["unattributable_asvs"] == 1 and r["unattributable_reads"] == 10.0
+
+
+def test_a_foreign_organism_is_excluded_from_the_error_rate():
+    """The bug this metric was rebuilt to avoid: 40 mismatches is a different organism."""
+    targets = {V4_A: ["r1"]}
+    foreign = V4_B                                   # unrelated, far from V4_A
+    one_off = "T" + V4_A[1:] if V4_A[0] != "T" else "A" + V4_A[1:]
+    seqs = {"f1": V4_A, "f2": one_off, "f3": foreign}
+    r = m.score_sample({"f1": 100.0, "f2": 10.0, "f3": 890.0}, seqs, targets, [1, 3, 10])
+    assert m.hamming(foreign, V4_A) > 10             # the fixture really is far away
+    assert r["within"][1]["asvs"] == 1 and r["within"][10]["asvs"] == 1
+    # 1 error over 80 bases in 10 reads, against those reads plus the 100 exact ones
+    assert r["within"][3]["mismatch_rate"] == pytest.approx(10 / (800 + 8000))
+    assert r["unattributable_read_fraction"] == pytest.approx(0.89)
+
+
+def test_cutoffs_are_parsed_and_checked():
+    assert m.read_cutoffs("10,1,3,3") == [1, 3, 10]
+    for bad in ("", "0,3", "-1", "a,b"):
+        with pytest.raises(m.MockError):
+            m.read_cutoffs(bad)
 
 
 def test_a_feature_missing_from_the_sequences_fires():
     with pytest.raises(m.MockError, match="not in the sequences"):
-        m.score_sample({"f9": 1.0}, {}, {V4_A: ["r1"]})
+        m.score_sample({"f9": 1.0}, {}, {V4_A: ["r1"]}, [3])
 
 
 def test_two_references_sharing_a_region_count_once():
     targets = {V4_A: ["r1", "r2"]}
-    r = m.score_sample({"f1": 10.0}, {"f1": V4_A}, targets)
+    r = m.score_sample({"f1": 10.0}, {"f1": V4_A}, targets, [3])
     assert r["targets_recovered"] == 1 and r["targets_total"] == 1
 
 

@@ -25,12 +25,24 @@ comparison is explicit rather than implied:
 Those are OTUs in one case and ASVs in the other. They are not the same unit as ours and
 the report says so rather than inviting a false comparison.
 
-Two limits stated up front rather than buried. First, the mismatch rate here is computed
-against the nearest reference of the **same length**, by counting differing positions. It
-is not mothur's `seq.error`, which aligns first, so do not report it under that name; an
-ASV with an insertion or deletion has no same-length reference and is counted separately.
-Second, a reference sequence whose primer sites carry mismatches may amplify poorly or
-not at all, so a missing target is not automatically an error in the pipeline.
+Three limits stated up front rather than buried.
+
+First, an ASV tens of mismatches from every reference is a different organism, not a
+miscalled base. Averaging its distance into an "error rate" measures nothing. This was
+the first version's bug, caught on the real mocks on 2026-09-12 when it reported a 15%
+"error rate" that was really the distance to unrelated organisms. So the rate is computed
+only over ASVs within `--attributable-within` mismatches of a reference, at several
+cutoffs so no single one carries the claim, with exact matches in the denominator because
+they are reads with zero errors. Everything beyond the widest cutoff is reported as not
+attributable to the reference, which is a statement about the sample, not the pipeline.
+
+Second, the comparison is against the nearest reference of the **same length**, counting
+differing positions. It is not mothur's `seq.error`, which aligns first, so do not report
+it under that name; an ASV with an insertion or deletion has no same-length reference and
+is counted as not attributable.
+
+Third, a reference sequence whose primer sites carry mismatches may amplify poorly or not
+at all, so a missing target is not automatically an error in the pipeline.
 
 Standard library only. Needs Python 3.8 or later, Linux or WSL, and conda with the
 QIIME 2 environment (see workflow/setup_envs.sh).
@@ -268,11 +280,20 @@ def parse_biom_tsv(text: str, name: str) -> dict[str, dict[str, float]]:
 # ---- the report ----------------------------------------------------------
 
 def score_sample(counts: dict[str, float], seqs: dict[str, str],
-                 targets: dict[str, list[str]]) -> dict:
-    """Sort one sample's ASVs into exact matches and everything else."""
+                 targets: dict[str, list[str]], cutoffs: list[int]) -> dict:
+    """Sort one sample's ASVs into exact matches, error variants, and foreign sequences.
+
+    An ASV that differs from every reference by tens of positions is a different
+    organism, not a miscalled base. Averaging its distance into an "error rate" measures
+    nothing, so the mismatch rate is computed only over ASVs within `cutoffs` mismatches
+    of a reference, reported at each cutoff so the number's sensitivity is visible, and
+    reads beyond the widest cutoff are reported separately as not attributable to the
+    reference.
+    """
     target_list = list(targets)
     total = sum(counts.values())
     exact_reads = 0.0
+    exact_bases = 0.0
     exact_hits: set[str] = set()
     others = []
     for feature, count in counts.items():
@@ -281,6 +302,7 @@ def score_sample(counts: dict[str, float], seqs: dict[str, str],
             raise MockError(f"feature {feature} is in the table but not in the sequences")
         if seq in targets:
             exact_reads += count
+            exact_bases += len(seq) * count
             exact_hits.add(seq)
             continue
         near = nearest_same_length(seq, target_list)
@@ -288,8 +310,25 @@ def score_sample(counts: dict[str, float], seqs: dict[str, str],
                        "mismatches": None if near is None else near[0]})
     other_reads = sum(o["reads"] for o in others)
     comparable = [o for o in others if o["mismatches"] is not None]
-    mismatch_bases = sum(o["mismatches"] * o["reads"] for o in comparable)
-    compared_bases = sum(o["length"] * o["reads"] for o in comparable)
+    widest = max(cutoffs)
+    within = {}
+    for k in cutoffs:
+        near = [o for o in comparable if o["mismatches"] <= k]
+        bases = sum(o["length"] * o["reads"] for o in near)
+        errors = sum(o["mismatches"] * o["reads"] for o in near)
+        within[k] = {
+            "asvs": len(near),
+            "reads": sum(o["reads"] for o in near),
+            # exact matches are reads with zero mismatches, so they belong in the
+            # denominator: the rate is errors per base over everything attributable
+            # to the reference, which is what an error rate means
+            "mismatch_rate": (errors / (bases + exact_bases)
+                              if bases + exact_bases else 0.0),
+            "mismatch_rate_variants_only": errors / bases if bases else 0.0,
+        }
+    foreign = [o for o in comparable if o["mismatches"] > widest]
+    unattributable_reads = (sum(o["reads"] for o in foreign)
+                            + sum(o["reads"] for o in others if o["mismatches"] is None))
     return {
         "reads": total,
         "asvs": len(counts),
@@ -300,23 +339,37 @@ def score_sample(counts: dict[str, float], seqs: dict[str, str],
         "other_asvs": len(others),
         "other_reads": other_reads,
         "other_read_fraction": other_reads / total if total else 0.0,
-        "other_asvs_without_same_length_reference": len(others) - len(comparable),
-        "mismatch_rate_same_length": mismatch_bases / compared_bases if compared_bases else 0.0,
+        "asvs_without_same_length_reference": len(others) - len(comparable),
+        "within": within,
+        "cutoffs": list(cutoffs),
+        "unattributable_asvs": len(foreign) + (len(others) - len(comparable)),
+        "unattributable_reads": unattributable_reads,
+        "unattributable_read_fraction": unattributable_reads / total if total else 0.0,
         "recovered": exact_hits,
         "others": others,
     }
 
 
-def write_summary(path: str, rows: list[tuple[str, dict]]) -> None:
-    cols = ["sample-id", "reads", "asvs", "targets_recovered", "targets_total",
-            "exact_read_fraction", "other_asvs", "other_read_fraction",
-            "other_asvs_without_same_length_reference", "mismatch_rate_same_length"]
+def write_summary(path: str, rows: list[tuple[str, dict]], cutoffs: list[int]) -> None:
+    base = ["reads", "asvs", "targets_recovered", "targets_total", "exact_read_fraction",
+            "other_asvs", "other_read_fraction"]
+    per_cutoff = []
+    for k in cutoffs:
+        per_cutoff += [f"variant_asvs_within_{k}", f"variant_read_fraction_within_{k}",
+                       f"mismatch_rate_within_{k}"]
+    tail = ["unattributable_asvs", "unattributable_read_fraction",
+            "asvs_without_same_length_reference"]
     with open(path, "w", newline="") as fh:
         w = csv.writer(fh, delimiter="\t", lineterminator="\n")
-        w.writerow(cols)
+        w.writerow(["sample-id"] + base + per_cutoff + tail)
         for sample, r in rows:
-            w.writerow([sample] + [round(r[c], 6) if isinstance(r[c], float) else r[c]
-                                   for c in cols[1:]])
+            cells = [round(r[c], 6) if isinstance(r[c], float) else r[c] for c in base]
+            for k in cutoffs:
+                v = r["within"][k]
+                cells += [v["asvs"], round(v["reads"] / r["reads"] if r["reads"] else 0.0, 6),
+                          round(v["mismatch_rate"], 8)]
+            cells += [r[c] if not isinstance(r[c], float) else round(r[c], 6) for c in tail]
+            w.writerow([sample] + cells)
 
 
 def write_missing(path: str, rows: list[tuple[str, dict]],
@@ -380,6 +433,12 @@ def parse_args(argv):
                    help="mismatches allowed per primer site in the reference (default 1). "
                         "Exact sites are always preferred; this only rescues records that "
                         "would otherwise be dropped")
+    p.add_argument("--attributable-within", default="1,3,10",
+                   help="mismatch cutoffs at which an ASV still counts as an error "
+                        "variant of a reference rather than a different organism "
+                        "(default 1,3,10). The mismatch rate is reported at each, so no "
+                        "single cutoff carries the claim; reads beyond the widest are "
+                        "reported as not attributable to the reference")
     p.add_argument("--low-depth-note", type=int, default=0,
                    help="log a note for any mock sample below this many reads (default 0, off)")
     p.add_argument("--env", default="qiime2-amplicon-2025.7", help="conda env with QIIME 2")
@@ -407,6 +466,19 @@ def read_sample_list(value: str) -> list[str]:
     return out
 
 
+def read_cutoffs(value: str) -> list[int]:
+    """Parse --attributable-within into a sorted list of distinct non-negative cutoffs."""
+    try:
+        values = sorted({int(v) for v in value.split(",") if v.strip()})
+    except ValueError as exc:
+        raise MockError(f"--attributable-within must be whole numbers: {value!r}") from exc
+    if not values:
+        raise MockError("--attributable-within is empty")
+    if values[0] < 1:
+        raise MockError(f"--attributable-within must be 1 or more, got {values[0]}")
+    return values
+
+
 def run(args) -> None:
     table = os.path.abspath(os.path.expanduser(args.table))
     rep_seqs = os.path.abspath(os.path.expanduser(args.rep_seqs))
@@ -417,6 +489,7 @@ def run(args) -> None:
             raise MockError(f"not found or empty: {path}")
     if args.max_primer_mismatch < 0:
         raise MockError(f"--max-primer-mismatch cannot be negative, got {args.max_primer_mismatch}")
+    cutoffs = read_cutoffs(args.attributable_within)
     wanted = read_sample_list(args.mock_samples)
     os.makedirs(outdir, exist_ok=True)
     setup_logging(outdir)
@@ -456,21 +529,31 @@ def run(args) -> None:
                         f"The table has {len(counts)} samples, for example "
                         f"{', '.join(sorted(counts)[:3])}")
 
-    rows = [(s, score_sample(counts[s], seqs, targets)) for s in wanted]
-    write_summary(os.path.join(outdir, "mock_summary.tsv"), rows)
+    rows = [(s, score_sample(counts[s], seqs, targets, cutoffs)) for s in wanted]
+    write_summary(os.path.join(outdir, "mock_summary.tsv"), rows, cutoffs)
     write_missing(os.path.join(outdir, "mock_missing_targets.tsv"), rows, targets)
     write_others(os.path.join(outdir, "mock_other_asvs.tsv"), rows)
 
     for sample, r in rows:
         log.info("%s: %d reads, %d ASVs, %d of %d targets recovered exactly "
-                 "(%.2f%% of reads), %d other ASVs (%.2f%% of reads), mismatch rate "
-                 "%.4f%% against the nearest same-length reference",
-                 sample, r["reads"], r["asvs"], r["targets_recovered"], r["targets_total"],
-                 100 * r["exact_read_fraction"], r["other_asvs"],
-                 100 * r["other_read_fraction"], 100 * r["mismatch_rate_same_length"])
-        if r["other_asvs_without_same_length_reference"]:
-            log.info("  %d of those ASVs have no reference of the same length, so they are "
-                     "outside the mismatch rate", r["other_asvs_without_same_length_reference"])
+                 "(%.2f%% of reads)", sample, r["reads"], r["asvs"],
+                 r["targets_recovered"], r["targets_total"],
+                 100 * r["exact_read_fraction"])
+        for k in cutoffs:
+            v = r["within"][k]
+            log.info("    within %d mismatch(es): %d ASV(s), %.2f%% of reads, "
+                     "error rate %.4f%% over the reads attributable to the reference",
+                     k, v["asvs"], 100 * v["reads"] / r["reads"] if r["reads"] else 0.0,
+                     100 * v["mismatch_rate"])
+        log.info("    not attributable to the reference: %d ASV(s), %.2f%% of reads. "
+                 "Beyond %d mismatches an ASV is a different organism, not a miscalled "
+                 "base, so it is excluded from the error rate rather than averaged into it",
+                 r["unattributable_asvs"], 100 * r["unattributable_read_fraction"],
+                 max(cutoffs))
+        if r["asvs_without_same_length_reference"]:
+            log.info("    %d ASV(s) have no reference of the same length (an indel), "
+                     "counted as not attributable",
+                     r["asvs_without_same_length_reference"])
         if args.low_depth_note and r["reads"] < args.low_depth_note:
             log.warning("  %s has %d reads, below the %d you asked to be told about. "
                         "Read these numbers as a description of this library, not as "
