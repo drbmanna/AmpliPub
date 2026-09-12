@@ -78,3 +78,16 @@ ap_metric_label <- function(metric) {
   out <- unname(labels[metric])
   ifelse(is.na(out), metric, out)
 }
+
+# "Other" is a pooled residual, not a taxon, and it is often the largest band.
+# Giving it a colour from the categorical palette makes it compete with real
+# taxa for the reader's attention; giving it black, which is where Okabe-Ito
+# ends, makes it dominate outright. It gets a light grey and is excluded from
+# the palette so no real taxon is starved of a colour.
+#' @keywords internal
+ap_scale_fill_taxa <- function(levels, ...) {
+  real <- setdiff(levels, "Other")
+  values <- stats::setNames(ap_palette(length(real)), real)
+  if ("Other" %in% levels) values <- c(values, Other = "#D9D9D9")
+  ggplot2::scale_fill_manual(values = values, breaks = levels, ...)
+}
