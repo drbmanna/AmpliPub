@@ -62,7 +62,6 @@ import csv
 import logging
 import os
 import platform
-import re
 import shlex
 import signal
 import subprocess

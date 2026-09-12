@@ -3,20 +3,28 @@
 From raw amplicon reads to publication-grade statistics and figures, in one reproducible
 project.
 
-**Status: early development.** The first stages run today. Most of the pipeline and the
-whole R statistics layer are still being built, and the interface will change.
+**Status: early development.** The sequence-processing pipeline is complete and has been
+run end to end on a public 544-run dataset. **The R statistics layer does not exist yet**,
+so nothing below the feature table is available, and the interface will change.
 
 ## Why
 
 A 16S analysis usually means QIIME 2 in one place, R in another, statistics in a third,
-and plotting in a fourth. To make life simple, AmpliPub runs all of it as one project:
+and plotting in a fourth. AmpliPub runs all of it as one project.
+
+Built and run today:
 
 - Downloads reads from a single accession and checks that every file arrived intact.
+- Demultiplexes, with every read accounted for and the barcode orientation checked.
 - Runs read QC and QIIME 2 processing, and stops when a step fails silently.
-- Runs the statistics with the checks each test needs, such as a dispersion test with
-  every PERMANOVA.
-- Produces figures ready to submit, and a methods draft from the analysis that ran.
-- Logs every step, so the analysis can be rerun.
+- Measures what your amplicon region can and cannot tell apart, before you sequence.
+- Logs every step, with the command, the versions and the thresholds used.
+
+Planned, and not yet written:
+
+- Statistics with the checks each test needs, such as a dispersion test with every
+  PERMANOVA.
+- Figures ready to submit, and a methods draft from the analysis that ran.
 
 ## How it fits together
 
@@ -51,9 +59,11 @@ Already have a table from another pipeline? Start at the feature table. The R pa
 takes any OTU, ASV, or gene count table plus sample metadata, whether it came from
 QIIME 2, DADA2, mothur, or anything else.
 
-The pipeline is being built one stage at a time on a public dataset (Baxter et al. 2016)
-that includes mock community samples, so each stage can be checked against a known answer.
-`R CMD check` runs on every push.
+The pipeline was built one stage at a time on a public dataset (Baxter et al. 2016) that
+includes mock community samples, so each stage could be checked against a known answer.
+Every stage has been run on all 544 runs of it.
+
+`R CMD check` and the workflow test suite both run on every push.
 
 ## Planned statistics layer
 

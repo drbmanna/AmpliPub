@@ -14,6 +14,67 @@ release file. `amplipub-qc` holds FastQC and MultiQC, pinned in `envs/qc.yml`. T
 tools stay out of the QIIME 2 environment so the release environment is never modified.
 Rerunning is safe: existing environments are only checked, not rebuilt.
 
+## 00_demux.py
+
+Demultiplexes EMP-protocol paired reads and accounts for every read. Runs in the QIIME 2
+environment. Standard library Python 3.8 or later.
+
+```bash
+python workflow/00_demux.py -i ~/research/run1/emp -m ~/research/run1/metadata.tsv --barcode-column barcode-sequence -o ~/research/run1/demux
+```
+
+**Already demultiplexed?** Most public data, including anything from SRA, arrives as one
+FASTQ pair per sample. There is nothing to demultiplex and this stage is not the one you
+want: import with a manifest, as `00_fetch_sra.py` prints at the end of its log.
+
+**The orientation trap.** `--p-rev-comp-barcodes` and `--p-rev-comp-mapping-barcodes`
+both default to False, and getting either wrong does not raise an error. It assigns
+almost nothing and the run continues to a near-empty feature table that reads as a failed
+experiment rather than a wrong flag. This is the most common catastrophic failure in 16S
+processing. When the assigned fraction falls below `--min-assigned`, this stage tries the
+other three combinations, reports what each would assign, and stops with the answer.
+Nothing downstream is written.
+
+**Read accounting is the point.** A demultiplexing step that does not tell you how many
+reads it threw away is not a quality control step. Assigned plus unassigned must equal the
+reads in `barcodes.fastq.gz`, and more assigned than input is fatal because the three EMP
+files may not come from one run. The unassigned fraction is a measurement, not waste: it
+carries barcode quality, index hopping and contamination from other libraries on the run.
+
+The `ErrorCorrectionDetails` artifact that QIIME 2 emits and nobody reads is summarised:
+records, corrections applied, and reads left with no sample.
+
+| Option | Meaning |
+|---|---|
+| `-i`, `--input DIR` | Directory holding `forward.fastq.gz`, `reverse.fastq.gz`, `barcodes.fastq.gz` |
+| `--barcode-column NAME` | Metadata column holding the barcodes, default `barcode-sequence` |
+| `--rev-comp-barcodes`, `--rev-comp-mapping-barcodes` | The two orientation flags |
+| `--no-golay` | Switch off 12nt Golay correction, which QIIME 2 has on by default |
+| `--min-assigned F` | Below this the orientation is checked, default 0.5, our choice |
+| `--no-orientation-check` | Do not try the other orientations on low assignment |
+
+### Outputs
+
+| File | Contents |
+|---|---|
+| `per_sample_sequences.qza` | The demultiplexed reads |
+| `error_correction.qza` | The barcode error correction detail, as QIIME 2 produced it |
+| `demux_counts.tsv` | Per sample: barcode, reads, and the share of the input |
+| `demux_log.txt` | Command, versions, the read accounting, corrections and every warning |
+
+### Guards
+
+| Guard | Why |
+|---|---|
+| Two samples sharing a barcode is fatal | They cannot be told apart |
+| Mixed barcode lengths or non-DNA values are fatal | Both mean the wrong column was named |
+| Golay on for barcodes that are not 12 nt warns | Golay correction is for 12nt barcodes |
+| Assigned plus unassigned must equal the input | Otherwise the accounting cannot be trusted |
+| Low assignment triggers the orientation check | A near-empty table is the failure this prevents |
+| A missing EMP file names the file | And says that demultiplexed data wants a manifest instead |
+
+---
+
 ## 00_fetch_sra.py
 
 Downloads raw FASTQ for a public accession and writes a QIIME 2 manifest. Standard
@@ -480,3 +541,233 @@ region never aborts a comparison; only every region failing is fatal.
 | One failing region does not abort the comparison | Comparing regions is the entire purpose |
 | Every region failing is fatal | Nothing was measured, so there is no result to report |
 | Taxonomy ids that match no reference record are fatal | Otherwise every rank would silently report zero resolved |
+
+## 07_collapse.py
+
+Pools the sequencing runs of each sample and proves no reads were lost doing it. Runs in
+the QIIME 2 environment. Standard library Python 3.8 or later.
+
+```bash
+python workflow/07_collapse.py -b ~/research/baxter2016/q2/dada2/table.qza -r ~/research/baxter2016/raw/run_to_sample.tsv --metadata ~/research/baxter2016/ref/metadata.tsv --expect-samples 495 -o ~/research/baxter2016/q2/collapsed
+```
+
+**A table from `03_dada2` has one column per run, not per sample.** A resequenced sample
+is counted twice, its depth halved and its diversity measured on a fraction of its reads,
+and nothing about that raises an error. Every per-sample number downstream is wrong until
+the runs are pooled, which is why this stage exists and why it checks its own arithmetic
+rather than trusting `--p-mode sum`.
+
+**Sample ids are not rewritten silently.** An id with whitespace is not a usable QIIME 2
+sample id, but quietly renaming somebody's samples is worse than stopping, so the default
+is to fail and name the offenders. `--sanitize-ids` is an explicit opt-in that writes the
+before and after map and refuses if sanitizing would collide with an existing id.
+
+| Option | Meaning |
+|---|---|
+| `-r`, `--run-map FILE` | Run to sample map, e.g. `run_to_sample.tsv` from `00_fetch_sra.py` |
+| `--group-column NAME` | Run-map column holding the sample id, default `sample_title` |
+| `--metadata FILE` | Study metadata to attach to the pooled samples |
+| `--expect-samples N` | Fail unless pooling gives exactly this many samples |
+| `--sanitize-ids` | Replace whitespace in sample ids with underscores, recorded in a map |
+
+### Outputs
+
+| File | Contents |
+|---|---|
+| `table_by_sample.qza` | The pooled feature table |
+| `runs_per_sample.tsv` | Per sample: how many runs, which ones, and the reads they hold |
+| `sample_metadata.tsv` | The study metadata joined to the pooled samples, with `in_study_metadata` marking what matched |
+| `grouping.tsv`, `sanitized_ids.tsv` | The grouping actually used, and any id that was changed |
+| `collapse_log.txt` | Command, versions, the read accounting and every mismatch |
+
+### Guards
+
+| Guard | Why |
+|---|---|
+| The read total must be identical before and after | Pooling moves reads between columns; it must not create or destroy any |
+| Every sample must equal the sum of its runs | The overall total can match while one sample is wrong |
+| A run in the table with no map entry is fatal | `feature-table group` would drop it silently |
+| Unusable sample ids stop the run | Renaming someone's samples without asking is worse than stopping |
+| Metadata matching nothing is fatal | Otherwise every downstream group test runs on empty columns |
+
+---
+
+## 08_filter.py
+
+Filters the table to the organisms and samples the study is about, and reports what each
+filter cost. Runs in the QIIME 2 environment. Standard library Python 3.8 or later.
+
+```bash
+python workflow/08_filter.py -b ~/research/baxter2016/q2/collapsed/table_by_sample.qza -r ~/research/baxter2016/q2/dada2/rep_seqs.qza -t ~/research/baxter2016/q2/taxonomy_final/taxonomy_gg2_2024.09_v4.qza -m ~/research/baxter2016/q2/collapsed/sample_metadata.tsv --drop-where "in_study_metadata='no'" --min-samples-fraction 0.05 -o ~/research/baxter2016/q2/filtered
+```
+
+Three filters in the order that makes each one interpretable: taxonomy first (keep the
+target domain, drop mitochondria and chloroplast), then samples (mocks and controls out
+before any community statistic is computed, because a mock left in shifts every
+between-sample distance), then prevalence.
+
+**The trap this stage was written around.** `qiime feature-table filter-features` has
+`--p-filter-empty-samples` on by default, so filtering *features* can silently remove
+*samples*. Every step reports samples before and after, and a sample lost to a feature
+filter is called out with the reason.
+
+**The prevalence threshold is a choice about what counts as evidence**, not a technical
+step, so it lands in `filter_summary.tsv` next to the result along with every other
+setting. The representative sequences are filtered against the final table, because a
+tree built from sequences the table no longer holds is a silent mismatch that surfaces
+much later as a diversity metric that cannot be computed.
+
+| Option | Meaning |
+|---|---|
+| `--include`, `--exclude` | Taxa to keep and drop, default `Bacteria` and `mitochondria,chloroplast` |
+| `--drop-where CLAUSE` | SQLite WHERE selecting samples to **drop**, e.g. `"in_study_metadata='no'"` |
+| `--min-samples-fraction F` | Drop features seen in fewer than this fraction of samples, default 0, off |
+| `--min-sample-reads N` | Drop samples below this many reads, default 0, off |
+
+### Outputs
+
+| File | Contents |
+|---|---|
+| `table_filtered.qza`, `rep_seqs_filtered.qza` | The filtered table and the sequences that match it |
+| `filter_summary.tsv` | Every filter in order, what survived, and what it cost, with the settings at the top |
+| `filter_per_sample.tsv` | Per sample: reads before, reads after, and whether it was dropped |
+| `filter_log.txt` | Command, versions, each step and every sample or feature loss |
+
+### Guards
+
+| Guard | Why |
+|---|---|
+| Samples lost to a *feature* filter are named | `--p-filter-empty-samples` would otherwise change the sample count without a word |
+| An emptied table is fatal, with the likely cause | An `--include` label that does not appear in the taxonomy removes everything |
+| A `--drop-where` matching nothing warns | Usually a wrong column or value rather than a clean table |
+| Sequences are filtered against the final table | Keeps the tree and the table in step |
+
+---
+
+## 09_tree.py
+
+Aligns, masks, builds and roots the phylogeny, then proves its tips cover the table. Runs
+in the QIIME 2 environment. Standard library Python 3.8 or later.
+
+```bash
+python workflow/09_tree.py -r ~/research/baxter2016/q2/filtered/rep_seqs_filtered.qza -b ~/research/baxter2016/q2/filtered/table_filtered.qza -o ~/research/baxter2016/q2/tree --threads 4
+```
+
+**The tips must match the table.** A phylogenetic diversity metric needs every feature in
+the table to be a tip in the tree. Filter the table after building the tree and UniFrac
+either fails much later with an opaque message or quietly computes on a subset, so this
+stage compares the two sets and names the features that are missing.
+
+**The masking step can remove most of the alignment.** On badly aligned input the masked
+alignment collapses to a fraction of its length and the tree is built on almost nothing
+with no error, so the length before and after masking is always reported and a floor is
+applied.
+
+| Option | Meaning |
+|---|---|
+| `-b`, `--table` | Feature table, to check the tips cover it. Omitting it is warned about loudly |
+| `--threads N` | MAFFT and FastTree threads, default 1, always passed explicitly |
+| `--mask-max-gap-frequency`, `--mask-min-conservation` | QIIME 2 defaults 1.0 and 0.4 |
+| `--min-masked-fraction F` | Fail if masking leaves less than this much, default 0.25, our choice |
+
+### Outputs
+
+| File | Contents |
+|---|---|
+| `rooted_tree.qza`, `unrooted_tree.qza` | The trees, rooted at the midpoint and not |
+| `alignment.qza`, `masked_alignment.qza` | The alignment before and after masking |
+| `tree_tips.tsv` | Every id, and whether it is in the tree and in the table |
+| `tree_log.txt` | Command, versions, alignment lengths and the tip comparison |
+
+### Guards
+
+| Guard | Why |
+|---|---|
+| Every table feature must be a tip | The reason the stage exists; a missing feature breaks UniFrac much later |
+| A collapsed masked alignment is fatal | A tree built on it would be noise, and nothing raises an error |
+| A sequence lost between alignment and masking is fatal | The two must hold the same records |
+| Internal node labels are not counted as tips | FastTree writes support values where a label goes; counting them inflated 654 tips to 973 |
+
+---
+
+## 10_diversity.py
+
+Alpha and beta diversity, with the rarefaction depth chosen from evidence. Runs in the
+QIIME 2 environment. Standard library Python 3.8 or later.
+
+```bash
+python workflow/10_diversity.py -b ~/research/baxter2016/q2/filtered/table_filtered.qza -p ~/research/baxter2016/q2/tree/rooted_tree.qza -m ~/research/baxter2016/q2/collapsed/sample_metadata.tsv --coverage-table ~/research/baxter2016/q2/collapsed/table_by_sample.qza --depth 10000 --group-column dx -o ~/research/baxter2016/q2/diversity
+```
+
+**There is no published rule for a rarefaction depth.** Schloss 2024 (mSphere,
+PMC10900887) found rarefaction the only approach that controls uneven sequencing effort
+across common alpha and beta metrics, over datasets spanning 100-fold variation, and says
+of the threshold: "My personal process for selecting a rarefaction threshold involves
+looking for a natural break in the distribution of the number of sequences." So this
+stage computes that break and tabulates what each candidate depth costs in samples.
+
+**It refuses to invent a depth.** No `--depth` and no `--auto-depth` is an error.
+`--auto-depth` uses the break, and if no break stands out it still refuses, because the
+absence of a break is the finding: the choice is arbitrary there and the sensitivity of
+any conclusion to it should be reported.
+
+**`core-metrics-phylogenetic` subsamples once.** Schloss separates *rarefying*, a single
+subsample, from *rarefaction*, repeating it 100 to 1,000 times and averaging, and argues
+the conflation "was lost on many subsequent researchers". The single subsample is what
+QIIME 2 gives you, so `alpha-rarefaction` runs alongside with `--p-iterations`, and both
+the log and `diversity_settings.tsv` record which number came from which.
+
+**Good's coverage is degenerate on ASV data, and the stage says so.** It is built on
+singletons, and DADA2 does not emit singleton ASVs by design (benjjneb/dada2 issue 1491:
+singletons are "too difficult to differentiate from errors"). So on a DADA2 table it
+returns 1.0 for every sample, which looks like excellent depth and is a fact about the
+denoiser. When the table holds no singletons the stage reports that rather than printing
+a perfect score. Good's coverage belongs to OTU pipelines that keep singletons. A
+prevalence filter has the same effect, which is why `--coverage-table` wants the
+pre-filter table.
+
+| Option | Meaning |
+|---|---|
+| `--depth N` | Rarefaction depth. Without it, nothing is guessed |
+| `--auto-depth` | Use the natural break, and log which depth that gave |
+| `--coverage-table FILE` | Table from **before** prevalence filtering, for Good's coverage |
+| `--group-column NAME` | Metadata column to test groups on. Repeat for more than one |
+| `--iterations N` | Rarefaction curve iterations, default 100 |
+| `--max-sample-loss F` | Refuse a depth dropping more than this fraction, default 0.1, our choice |
+
+### Outputs
+
+| File | Contents |
+|---|---|
+| `core_metrics/` | The QIIME 2 alpha vectors, distance matrices and PCoA plots |
+| `alpha_rarefaction.qzv` | The repeated-subsampling curves |
+| `alpha_*.qzv`, `beta_*.qzv` | Group tests per metric and column, PERMANOVA with 999 permutations |
+| `depth_candidates.tsv` | Each candidate depth, samples kept and lost, and reads used |
+| `sample_depths.tsv` | Per sample: reads, whether it survives the depth, and Good's coverage |
+| `diversity_settings.tsv` | The depth and its source, the iteration count, and the coverage status |
+| `diversity_log.txt` | Command, versions, the break, the caveats and every group test |
+
+### Guards
+
+| Guard | Why |
+|---|---|
+| No depth is invented | There is no standard depth, and a default would be a fabricated one |
+| A depth dropping more than `--max-sample-loss` is fatal | Discarding a tenth of a study should be deliberate and recorded |
+| A depth above every sample is fatal | Nothing would be left |
+| A table with no singletons is called degenerate | Good's coverage of 1.0 would otherwise read as evidence of depth |
+| The single-subsample caveat is always logged | So a `core-metrics` number is never reported as a rarefied one |
+
+---
+
+## amplicon_regions.py
+
+Not a stage. The region logic shared by `04_mock.py` and `06_resolution.py`: IUPAC-aware
+primer matching, extracting what lies between a primer pair, and grouping sequences that
+are identical over that region. One tested implementation rather than a copy in each
+stage, so a fix to either reaches both.
+
+Everything in it is IUPAC-aware, because primers carry ambiguity codes and treating them
+as literal bases finds nothing while raising no error. `find_primer` prefers an exact
+match anywhere over an earlier near match, since a near match exists to rescue references
+whose primer site carries a real mismatch, not to license cutting at the first thing that
+looks close.
