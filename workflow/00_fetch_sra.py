@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import glob
 import gzip
 import hashlib
 import io
@@ -344,8 +345,16 @@ def download(rf: ReadFile, dest_dir: str, retries: int = 5) -> str:
     raise FetchError(f"{rf.name}: failed size/MD5 verification after {retries} attempts")
 
 
-def download_all(files: list[ReadFile], dest_dir: str, threads: int, retries: int) -> None:
-    failures = []
+def download_all(files: list[ReadFile], dest_dir: str, threads: int, retries: int,
+                 collect_failures: bool = False) -> list[ReadFile]:
+    """Download every file. Returns the files that failed verification.
+
+    With collect_failures False one failure is fatal. With it True the caller
+    decides what to do, which is how --sra-fallback reaches files ENA lists in
+    its filereport but will not actually serve.
+    """
+    failures: list[str] = []
+    failed: list[ReadFile] = []
     done = 0
     with ThreadPoolExecutor(max_workers=threads) as pool:
         futures = {pool.submit(download, rf, dest_dir, retries): rf for rf in files}
@@ -357,21 +366,31 @@ def download_all(files: list[ReadFile], dest_dir: str, threads: int, retries: in
                 log.info("[%d/%d] %s %s", done, len(files), status, rf.name)
             except FetchError as exc:
                 failures.append(str(exc))
+                failed.append(rf)
                 log.error("[%d/%d] FAILED %s", done, len(files), rf.name)
-    if failures:
+    if failures and not collect_failures:
         raise FetchError(f"{len(failures)} file(s) failed:\n  " + "\n  ".join(failures)
-                         + "\nRerun the same command to resume.")
+                         + "\nRerun the same command to resume. If ENA lists a file "
+                         "but will not serve it, rerun with --sra-fallback.")
+    return failed
 
 
 def fetch_with_sra_tools(row: dict, dest_dir: str, threads: int) -> list[ReadFile]:
-    """Fallback for runs ENA does not mirror. MD5s here are computed locally,
-    so the check is a read count against ENA rather than a checksum."""
+    """Fetch a whole run from NCBI SRA.
+
+    Used for runs ENA does not mirror and for runs whose ENA files fail
+    verification. The whole run is refetched, not the single broken mate, so
+    both mates come from one source and stay in the same read order. MD5s
+    here are computed locally, so the check is a read count against ENA
+    rather than a checksum against the archive."""
     run = row["run_accession"]
     exe = shutil.which("fasterq-dump")
     if not exe:
         raise FetchError(f"{run}: ENA has no FASTQ and fasterq-dump is not on PATH")
     tmp = os.path.join(dest_dir, f".tmp_{run}")
     os.makedirs(tmp, exist_ok=True)
+    for stale in glob.glob(os.path.join(dest_dir, f"{run}*.fastq.gz.part")):
+        os.remove(stale)  # a half-finished ENA download of the same run
     cmd = [exe, "--split-files", "--threads", str(threads), "--temp", tmp, "--outdir", tmp, run]
     log.info("%s: %s", run, shlex.join(cmd))
     try:
@@ -501,6 +520,19 @@ def write_run_map(path: str, rows: list[dict]) -> None:
                         r["instrument_model"], r["read_count"]])
 
 
+def write_run_sources(path: str, rows: list[dict], from_sra: set[str]) -> None:
+    """Record where each run's FASTQ actually came from, for the methods section."""
+    with open(path, "w", newline="") as fh:
+        w = csv.writer(fh, delimiter="\t", lineterminator="\n")
+        w.writerow(["run", "source", "verified_by"])
+        for r in rows:
+            run = r["run_accession"]
+            if run in from_sra:
+                w.writerow([run, "sra", "read_count"])
+            else:
+                w.writerow([run, "ena", "size+md5"])
+
+
 def write_rows(path: str, rows: list[dict]) -> None:
     with open(path, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=ENA_FIELDS, delimiter="\t",
@@ -534,7 +566,8 @@ def parse_args(argv):
     p.add_argument("--retries", type=int, default=5, help="attempts per file (default 5)")
     p.add_argument("--dry-run", action="store_true", help="resolve and plan, download nothing")
     p.add_argument("--sra-fallback", action="store_true",
-                   help="use fasterq-dump for runs ENA does not mirror")
+                   help="use fasterq-dump for runs ENA does not mirror, and for runs "
+                        "whose ENA files fail size or MD5 verification")
     p.add_argument("--no-metadata", action="store_true", help="skip NCBI BioSample attributes")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return p.parse_args(argv)
@@ -576,7 +609,7 @@ def run(args) -> None:
         raise FetchError(f"{len(no_fastq)} run(s) have no FASTQ on ENA (e.g. {no_fastq[0]}). "
                          "Rerun with --sra-fallback to fetch them with fasterq-dump.")
     layout = check_layout(plan, rows) if any(plan.values()) else "paired"
-    files = [f for fs in plan.values() for f in fs]
+    files = [f for group in plan.values() for f in group]
     total = sum(f.size for f in files)
     log.info("plan: %d %s-end runs, %d files, %.2f GB from ENA; %d run(s) via sra-tools",
              len(rows) - len(no_fastq), layout, len(files), total / 1e9, len(no_fastq))
@@ -585,11 +618,19 @@ def run(args) -> None:
         return
 
     # Stage 3
-    download_all(files, fastq_dir, args.threads, args.retries)
+    failed = download_all(files, fastq_dir, args.threads, args.retries,
+                          collect_failures=args.sra_fallback)
     by_row = {r["run_accession"]: r for r in rows}
-    for run_acc in no_fastq:
+    broken = list(dict.fromkeys(f.run for f in failed))
+    if broken:
+        log.warning("%d run(s) have files ENA lists but will not serve correctly: %s. "
+                    "Refetching each whole run from SRA so both mates come from one "
+                    "source and keep the same read order.", len(broken), ", ".join(broken))
+    from_sra = []
+    for run_acc in no_fastq + broken:
         plan[run_acc] = fetch_with_sra_tools(by_row[run_acc], fastq_dir, args.threads)
-        files.extend(plan[run_acc])
+        from_sra.append(run_acc)
+    files = [f for group in plan.values() for f in group]
     layout = check_layout(plan, rows)
 
     # Stage 4
@@ -604,9 +645,15 @@ def run(args) -> None:
     manifest = os.path.join(outdir, "manifest.tsv")
     write_manifest(manifest, plan, layout, fastq_dir)
     write_run_map(os.path.join(outdir, "run_to_sample.tsv"), rows)
+    write_run_sources(os.path.join(outdir, "run_sources.tsv"), rows, set(from_sra))
     with open(os.path.join(outdir, "checksums.md5"), "w", newline="") as fh:
         for f in sorted(files, key=lambda f: f.name):
             fh.write(f"{f.md5}  fastq/{f.name}\n")
+    if from_sra:
+        log.warning("%d run(s) came from SRA, not ENA: %s. Their MD5s in "
+                    "checksums.md5 were computed here, so they verify the local copy "
+                    "only. The archive check for them was the read count. See "
+                    "run_sources.tsv.", len(from_sra), ", ".join(sorted(from_sra)))
     n_rows = sum(1 for _ in open(manifest)) - 1
     if n_rows != len(rows):
         raise FetchError(f"manifest has {n_rows} rows for {len(rows)} runs")

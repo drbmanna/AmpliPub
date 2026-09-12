@@ -33,11 +33,19 @@ BioSample (`SAMN…`) or a run (`SRR…`). Pass one accession only.
 | `--expect-runs N` | Fail unless the accession resolves to exactly N runs |
 | `--threads N` | Parallel downloads, default 4 |
 | `--retries N` | Attempts per file, default 5 |
-| `--sra-fallback` | Use `fasterq-dump` for runs that ENA does not mirror |
+| `--sra-fallback` | Use `fasterq-dump` for runs ENA does not mirror, and for runs whose ENA files fail size or MD5 verification |
 | `--no-metadata` | Skip the NCBI BioSample attribute lookup |
 
 Rerunning the same command resumes. Files that already pass their checks are skipped,
 and partial files continue from where they stopped.
+
+**ENA first, SRA only as a fallback.** ENA serves the submitted FASTQ files and
+publishes a size and MD5 for each, so every byte is checked against the archive.
+`fasterq-dump` rebuilds FASTQ from the SRA archive, so there is no archive checksum
+to compare against and the read headers are rewritten. The fallback therefore checks
+the read count against ENA's `read_count` and records the run as `sra` in
+`run_sources.tsv`. When a file fails verification the whole run is refetched, not the
+single broken mate, so both mates come from one source and stay in the same order.
 
 ### Outputs
 
@@ -49,6 +57,7 @@ and partial files continue from where they stopped.
 | `sample_metadata.tsv` | One row per BioSample with all submitter attributes |
 | `runs.tsv`, `ena_filereport.tsv` | The selected runs, and ENA's raw answer |
 | `checksums.md5` | Verify with `md5sum -c checksums.md5` from the output directory |
+| `run_sources.tsv` | Per run: `ena` or `sra`, and what verified it |
 | `fetch_log.txt` | Command, versions, queries and progress, appended on every run |
 
 **One manifest row per SRA run, not per sample.** An SRA run (`SRR…`) is one sequenced

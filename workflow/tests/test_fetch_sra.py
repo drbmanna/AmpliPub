@@ -5,6 +5,7 @@ fixtures/README.md). Downloads are served from memory, so no network is used.
 """
 
 import csv
+import gzip
 import hashlib
 import importlib.util
 import io
@@ -325,3 +326,107 @@ def test_stalled_fasterq_dump_is_killed(tmp_path, monkeypatch):
     with pytest.raises(fs.FetchError, match="timed out after 1 s"):
         fs.fetch_with_sra_tools({"run_accession": "SRR1", "read_count": "10"}, str(tmp_path), 1)
     assert time.monotonic() - start < 10
+
+
+# ---- ENA lists a file but will not serve it ------------------------------
+
+class BrokenForOne:
+    """ENA behaviour seen on 2026-09-12: the filereport lists size and MD5, but
+    the HTTPS path returns a 797-byte directory listing with HTTP 200."""
+
+    HTML = b"<html><head><title>Index of /vol1/fastq/</title></head><body></body></html>"
+
+    def __init__(self, blobs, broken_url):
+        self.blobs = blobs
+        self.broken_url = broken_url
+
+    def __call__(self, url, start):
+        if url == self.broken_url:
+            return 200, io.BytesIO(self.HTML)
+        body = self.blobs[url][start:]
+        return (206 if start else 200), io.BytesIO(body)
+
+
+def fake_fasterq_dump(tmp_path, run, n_reads=50):
+    """A stand-in that writes the two mates fasterq-dump would write."""
+    script = tmp_path / "fasterq-dump"
+    script.write_text(
+        "#!/bin/sh\n"
+        "out=.\n"
+        'while [ $# -gt 0 ]; do\n'
+        '  case "$1" in --outdir) out="$2"; shift 2;; *) shift;; esac\n'
+        "done\n"
+        'for m in 1 2; do\n'
+        '  f="$out/' + run + '_$m.fastq"\n'
+        '  : > "$f"\n'
+        "  i=0\n"
+        "  while [ $i -lt " + str(n_reads) + " ]; do\n"
+        '    printf "@sra.%s\\nACGT\\n+\\nIIII\\n" "$i" >> "$f"\n'
+        "    i=$((i+1))\n"
+        "  done\n"
+        "done\n"
+    )
+    script.chmod(0o755)
+    return script
+
+
+def broken_file_setup(tmp_path, monkeypatch, run="SRR1", mate=1):
+    ena_text, blobs = synthetic_project()
+    broken = f"https://ftp.sra.ebi.ac.uk/vol1/fastq/{run}_{mate}.fastq.gz"
+    assert broken in blobs
+    monkeypatch.setattr(fs, "http_get", fake_http(ena_text))
+    monkeypatch.setattr(fs, "_open", BrokenForOne(blobs, broken))
+    return broken
+
+
+def test_unservable_ena_file_without_fallback_fails(tmp_path, monkeypatch):
+    broken_file_setup(tmp_path, monkeypatch)
+    assert fs.main(["PRJNA1", "-o", str(tmp_path), "--retries", "1"]) == 1
+    assert not (tmp_path / "manifest.tsv").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the stub fasterq-dump is a shell script")
+def test_unservable_ena_file_falls_back_to_sra(tmp_path, monkeypatch):
+    broken_file_setup(tmp_path, monkeypatch)
+    script = fake_fasterq_dump(tmp_path, "SRR1")
+    monkeypatch.setattr(fs.shutil, "which", lambda name: str(script))
+    assert fs.main(["PRJNA1", "-o", str(tmp_path), "--retries", "1", "--sra-fallback"]) == 0
+
+    fastq = tmp_path / "fastq"
+    # the whole run is refetched, so the mate ENA did serve is replaced too
+    for mate in (1, 2):
+        with gzip.open(fastq / f"SRR1_{mate}.fastq.gz", "rt") as fh:
+            assert fh.readline().startswith("@sra.")
+    # runs ENA served correctly are untouched (fixture payloads are not gzipped)
+    assert (fastq / "SRR2_1.fastq.gz").read_bytes().startswith(b"@SRR2.")
+    assert not list(fastq.glob("*.part"))
+    assert not list(fastq.glob(".tmp_*"))
+
+    src = {r["run"]: r for r in csv.DictReader((tmp_path / "run_sources.tsv").open(), delimiter="\t")}
+    assert src["SRR1"] == {"run": "SRR1", "source": "sra", "verified_by": "read_count"}
+    assert src["SRR2"]["source"] == "ena" and src["SRR3"]["source"] == "ena"
+    manifest = list(csv.reader((tmp_path / "manifest.tsv").open(), delimiter="\t"))
+    assert sorted(m[0] for m in manifest[1:]) == ["SRR1", "SRR2", "SRR3"]
+    assert len((tmp_path / "checksums.md5").read_text().splitlines()) == 6
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the stub fasterq-dump is a shell script")
+def test_fallback_clears_a_stale_partial(tmp_path, monkeypatch):
+    broken_file_setup(tmp_path, monkeypatch)
+    script = fake_fasterq_dump(tmp_path, "SRR1")
+    monkeypatch.setattr(fs.shutil, "which", lambda name: str(script))
+    fastq = tmp_path / "fastq"
+    fastq.mkdir(exist_ok=True)
+    stale = fastq / "SRR1_1.fastq.gz.part"
+    stale.write_bytes(b"half a download")
+    assert fs.main(["PRJNA1", "-o", str(tmp_path), "--retries", "1", "--sra-fallback"]) == 0
+    assert not stale.exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the stub fasterq-dump is a shell script")
+def test_fallback_read_count_mismatch_fires(tmp_path, monkeypatch):
+    broken_file_setup(tmp_path, monkeypatch)
+    script = fake_fasterq_dump(tmp_path, "SRR1", n_reads=49)  # ENA says 50
+    monkeypatch.setattr(fs.shutil, "which", lambda name: str(script))
+    assert fs.main(["PRJNA1", "-o", str(tmp_path), "--retries", "1", "--sra-fallback"]) == 1
+    assert "49 reads" in (tmp_path / "fetch_log.txt").read_text()
