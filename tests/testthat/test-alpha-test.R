@@ -113,14 +113,38 @@ test_that("the Kruskal-Wallis effect is rstatix's eta squared (H), with an unrou
 
   expect_equal(res$test, "Kruskal-Wallis")
   expect_equal(res$effect, "eta squared (H)")
-  ref <- rstatix::kruskal_effsize(data.frame(value = values, g = factor(meta$g)),
-                                  value ~ g)$effsize
-  expect_equal(res$estimate, unname(ref))
-  # rstatix's own interval is rounded to 0.01. This one comes from boot and
-  # must not be.
+  # The interval comes from boot and is not rounded to 0.01, as rstatix's is.
   expect_false(isTRUE(all.equal(res$ci_low * 100, round(res$ci_low * 100))))
   expect_lte(res$ci_low, res$estimate)
   expect_gte(res$ci_high, res$estimate)
+
+  # rstatix computes the same quantity. From 1.0.0 it clamps negatives to 0, so
+  # it is an independent check only for a clearly positive effect like this one.
+  skip_if_not_installed("rstatix")
+  ref <- rstatix::kruskal_effsize(data.frame(value = values, g = factor(meta$g)),
+                                  value ~ g)$effsize
+  expect_gt(unname(ref), 0.05)
+  expect_equal(res$estimate, unname(ref))
+})
+
+test_that("a null Kruskal-Wallis effect keeps its negative value and does not error", {
+  # Found on CI 2026-09-13: rstatix >= 1.0.0 clamps eta squared (H) at 0. The
+  # bias-corrected estimate is negative whenever H < k - 1, which is routine for
+  # null effects, and it must stay negative, as adjusted R2 does for beta.
+  n <- 90L
+  meta <- data.frame(g = rep(c("a", "b", "c"), times = n / 3),
+                     row.names = sprintf("S%02d", seq_len(n)), stringsAsFactors = FALSE)
+  # Ranks dealt to the groups in turn, so the rank sums are nearly equal and H is
+  # far below its null expectation of k - 1 = 2. The exponential keeps the
+  # values skewed, which routes to the rank-based test; ranks are unaffected.
+  values <- exp(seq_len(n) / 10)
+  res <- ap_alpha_test(ap_fixture_alpha(values, meta), "g", n_boot = 200L)$results
+
+  H <- unname(stats::kruskal.test(values, factor(meta$g))$statistic)
+  expect_lt(H, 2)
+  expect_equal(res$test, "Kruskal-Wallis")
+  expect_equal(res$estimate, (H - 3 + 1) / (n - 3))
+  expect_lt(res$estimate, 0)
 })
 
 test_that("a covariate that explains the difference removes it", {

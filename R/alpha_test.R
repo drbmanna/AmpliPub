@@ -189,17 +189,19 @@ ap_eta_squared <- function(sm) {
 
 #' @keywords internal
 ap_eta_squared_h <- function(v, g, n_boot) {
-  # Kruskal-Wallis effect size: eta squared based on H, (H - k + 1) / (n - k).
-  # The estimate is rstatix::kruskal_effsize. Its bootstrap interval is not
-  # used, because rstatix rounds it to two decimals, too coarse for effects of
-  # 0.005 to 0.04. The interval comes from boot::boot and boot::boot.ci, the
-  # functions rstatix itself calls, with the formula rstatix documents evaluated
-  # on each replicate. On 2,000 replicates at n = 487 that matched calling
-  # rstatix per replicate exactly, and ran about 13 times faster. The guard
-  # stops if the formula and rstatix ever disagree on the full data.
+  # Kruskal-Wallis effect size: eta squared based on H, (H - k + 1) / (n - k),
+  # computed from stats::kruskal.test. This one line is a documented exception
+  # to taking statistics from packages. rstatix::kruskal_effsize computes the
+  # same quantity, but from rstatix 1.0.0 it clamps the value to [0, 1]. The
+  # estimate is bias-corrected so that a null effect averages zero and is
+  # negative about half the time; clamping piles nulls at 0 and biases them
+  # upward. rstatix is used in the tests as an independent check on positive
+  # effects, where the two agree.
+  #
+  # The interval comes from boot::boot and boot::boot.ci (percentile), with the
+  # same formula on each replicate. rstatix's own interval is rounded to two
+  # decimals, too coarse for effects of 0.005 to 0.04.
   df <- data.frame(value = v, g = droplevels(as.factor(g)))
-  # rstatix passes on kruskal.test's statistic name; the estimate is a plain number.
-  est <- unname(rstatix::kruskal_effsize(df, value ~ g)$effsize)
 
   eta_h <- function(d, i) {
     d <- d[i, , drop = FALSE]
@@ -209,13 +211,7 @@ ap_eta_squared_h <- function(v, g, n_boot) {
     H <- unname(stats::kruskal.test(d$value, grp)$statistic)
     (H - k + 1) / (nrow(d) - k)
   }
-  full <- eta_h(df, seq_len(nrow(df)))
-  ap_assert(
-    isTRUE(abs(full - est) < 1e-10),
-    paste0("The bootstrap formula gives {signif(full, 8)} but rstatix gives ",
-           "{signif(est, 8)} on the full data, so the interval would not belong ",
-           "to the estimate.")
-  )
+  est <- eta_h(df, seq_len(nrow(df)))
 
   b <- boot::boot(df, eta_h, R = n_boot)
   ci <- tryCatch(unname(boot::boot.ci(b, type = "perc")$percent[4:5]),

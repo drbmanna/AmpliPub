@@ -27,8 +27,10 @@
 #' therefore ranked on adjusted PERMANOVA R2, `1 - (1 - R2)(n - 1)/(n - df - 1)`,
 #' and numeric alpha rows on the same adjustment of Spearman rho squared.
 #' Categorical alpha rows use eta squared based on the Kruskal-Wallis H,
-#' `(H - k + 1) / (n - k)`, from `rstatix::kruskal_effsize`, which already
-#' subtracts the null expectation of H. Raw values stay in `effect`, adjusted
+#' `(H - k + 1) / (n - k)`, computed from `stats::kruskal.test`, which already
+#' subtracts the null expectation of H and so can be negative for a null effect.
+#' It is not taken from `rstatix::kruskal_effsize`, which from version 1.0.0
+#' clamps negative values to 0 and so would pile null effects at zero. Raw values stay in `effect`, adjusted
 #' ones in `effect_adj`.
 #'
 #' These are all proportions of variance, but not of the same variance: R2
@@ -310,7 +312,9 @@ ap_screen_alpha_effect <- function(y, g, type) {
     ht <- tryCatch(stats::kruskal.test(y, g), error = function(e) NULL)
     if (is.null(ht)) return(out)
     out$statistic <- unname(ht$statistic)
-    out$effect <- rstatix::kruskal_effsize(data.frame(value = y, g = g), value ~ g)$effsize
+    # Eta squared (H) from the documented formula, not rstatix, which clamps
+    # negative values to 0 from version 1.0.0 (see ap_eta_squared_h).
+    out$effect <- (out$statistic - k + 1) / (n - k)
     out$df <- k - 1
     # Eta squared (H) already subtracts the null expectation of H, which is
     # k - 1, so it needs no further adjustment.

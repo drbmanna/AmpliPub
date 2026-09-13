@@ -31,7 +31,6 @@ Imports:
     methods,
     mia,
     rlang,
-    rstatix,
     S4Vectors,
     scales,
     stats,
@@ -49,6 +48,7 @@ Suggests:
     MicrobiomeStat,
     microbiome,
     lme4,
+    rstatix,
     withr,
     zip,
     testthat (>= 3.0.0)

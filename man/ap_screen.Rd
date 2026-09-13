@@ -63,8 +63,10 @@ samples, outranks a real two-group effect on the raw scale. Beta rows are
 therefore ranked on adjusted PERMANOVA R2, \code{1 - (1 - R2)(n - 1)/(n - df - 1)},
 and numeric alpha rows on the same adjustment of Spearman rho squared.
 Categorical alpha rows use eta squared based on the Kruskal-Wallis H,
-\code{(H - k + 1) / (n - k)}, from \code{rstatix::kruskal_effsize}, which already
-subtracts the null expectation of H. Raw values stay in \code{effect}, adjusted
+\code{(H - k + 1) / (n - k)}, computed from \code{stats::kruskal.test}, which already
+subtracts the null expectation of H and so can be negative for a null effect.
+It is not taken from \code{rstatix::kruskal_effsize}, which from version 1.0.0
+clamps negative values to 0 and so would pile null effects at zero. Raw values stay in \code{effect}, adjusted
 ones in \code{effect_adj}.
 
 These are all proportions of variance, but not of the same variance: R2
