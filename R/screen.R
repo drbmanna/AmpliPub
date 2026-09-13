@@ -176,17 +176,6 @@ ap_screen <- function(alpha = NULL,
         ids <- rownames(mats[[m]])
         g <- beta_local$metadata[[v]][match(ids, rownames(bmeta))]
 
-        # The subsamples use a direct trace formula instead of adonis2. If the
-        # two ever disagree on the full data, every stability number is wrong
-        # while still looking plausible, so the screen stops here.
-        r2_fast <- ap_screen_r2(g, m = mats[[m]])
-        ap_assert(
-          isTRUE(abs(r2_fast - r$R2) < 1e-8),
-          paste0("Internal R2 ({signif(r2_fast, 8)}) disagrees with adonis2 ",
-                 "({signif(r$R2, 8)}) for `{v}` on {m}. Stability would be computed ",
-                 "on the wrong quantity, so the screen stops.")
-        )
-
         # The subsamples derive df from the grouping; the full-data df comes from
         # adonis2. They must agree or the adjusted scale differs between the two.
         ap_assert(isTRUE(r$df == ap_screen_df(g)),
@@ -341,44 +330,21 @@ ap_screen_alpha_effect <- function(y, g, type) {
   out
 }
 
-# Gower's double-centred matrix, G = -1/2 J D^2 J. PERMANOVA is built on it:
-# total sum of squares is tr(G), and the sum of squares a model explains is
-# tr(HG), with H the hat matrix of the model. This is the McArdle and Anderson
-# formulation adonis2 uses.
+# R2 of one term on a distance matrix, from vegan::adonis2 with no permutations,
+# computed on the samples where the term is not missing. Used for every
+# subsample in the stability estimate, where only the effect size is needed.
 #' @keywords internal
-ap_gower <- function(m) {
-  a <- -0.5 * m^2
-  rm <- rowMeans(a)
-  a - outer(rm, rm, "+") + mean(a)
-}
-
-#' @keywords internal
-ap_model_r2 <- function(G, X) {
-  qx <- qr(X)
-  q <- qr.Q(qx)[, seq_len(qx$rank), drop = FALSE]
-  sum((G %*% q) * q) / sum(diag(G))
-}
-
-# R2 of one term on a distance matrix. `G` may be passed in precomputed for
-# speed, but it is only valid for the full sample set it was built on: when `g`
-# has missing values the centring changes, so G is rebuilt on the complete
-# samples from `m`. Reusing it there would give a wrong number that looks right.
-#' @keywords internal
-ap_screen_r2 <- function(g, G = NULL, m = NULL) {
+ap_screen_r2 <- function(g, m) {
   keep <- !is.na(g)
-  if (!all(keep) || is.null(G)) {
-    ap_assert(!is.null(m), "A distance matrix is needed to rebuild the Gower matrix.")
-    m <- m[keep, keep, drop = FALSE]
-    g <- g[keep]
-    G <- ap_gower(m)
-  }
+  g <- g[keep]
   if (is.factor(g)) {
     g <- droplevels(g)
     if (nlevels(g) < 2L) return(NA_real_)
   } else if (length(unique(g)) < 2L) {
     return(NA_real_)
   }
-  ap_model_r2(G, stats::model.matrix(~ g))
+  d <- stats::as.dist(m[keep, keep, drop = FALSE])
+  vegan::adonis2(d ~ g, data = data.frame(g = g), permutations = 0)[1, "R2"]
 }
 
 # Adjusted R2. Raw R2 has a null expectation of about df / (n - 1), which is
@@ -409,7 +375,6 @@ ap_screen_stability <- function(specs, mats, n_resample, fraction, top_k, seed) 
   eff <- matrix(NA_real_, nrow = n_tests, ncol = n_resample)
   for (b in seq_len(n_resample)) {
     sub <- resamples[[b]]
-    gower_cache <- list()
     for (j in seq_len(n_tests)) {
       s <- specs[[j]]
       idx <- which(s$ids %in% sub)
@@ -417,9 +382,8 @@ ap_screen_stability <- function(specs, mats, n_resample, fraction, top_k, seed) 
         eff[j, b] <- ap_screen_alpha_effect(s$y[idx], s$g[idx], s$type)$effect_adj
       } else {
         msub <- mats[[s$metric]][idx, idx, drop = FALSE]
-        if (is.null(gower_cache[[s$metric]])) gower_cache[[s$metric]] <- ap_gower(msub)
         gs <- s$g[idx]
-        r2 <- ap_screen_r2(gs, G = gower_cache[[s$metric]], m = msub)
+        r2 <- ap_screen_r2(gs, msub)
         eff[j, b] <- ap_adjust_r2(r2, sum(!is.na(gs)), ap_screen_df(gs))
       }
     }

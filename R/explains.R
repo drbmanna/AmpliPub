@@ -112,7 +112,9 @@ ap_explains_beta <- function(beta, terms, metrics, permutations, seed) {
     marg <- pn$results[pn$results$metric == m, ]
     ap_assert(all(marg$n == nrow(md)),
               "The model R2 and the marginal R2 for {m} were computed on different samples.")
-    model_r2 <- ap_model_r2(ap_gower(mm), stats::model.matrix(~ ., data = md))
+    # R2 of all terms fitted together, from vegan::adonis2 with by = NULL.
+    dd <- stats::as.dist(mm)
+    model_r2 <- vegan::adonis2(dd ~ ., data = md, by = NULL, permutations = 0)[1, "R2"]
     data.frame(metric = m, n = nrow(md), model_R2 = model_r2,
                sum_marginal_R2 = sum(marg$R2), shared_R2 = model_r2 - sum(marg$R2),
                stringsAsFactors = FALSE)

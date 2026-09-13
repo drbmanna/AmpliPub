@@ -123,28 +123,20 @@ test_that("beta rows carry the dispersion verdict and a confound shows up as an 
   expect_equal(b$effect[b$variable == "group"], b$effect[b$variable == "batch_run"])
 })
 
-test_that("the fast R2 used for stability equals adonis2 exactly", {
+test_that("the R2 used for stability drops missing samples before calling adonis2", {
+  # The value is adonis2's. What AmpliPub controls is which samples reach it: a
+  # sample missing the variable must leave the distance matrix too, or the
+  # total sum of squares is computed over the wrong set.
   f <- ap_fixture_screen_inputs()
-  d <- f$beta$distances$bray_curtis
-  m <- as.matrix(d)
-  meta <- f$beta$metadata[rownames(m), ]
-
-  g <- factor(meta$group)
-  ref <- vegan::adonis2(d ~ g, data = data.frame(g = g), permutations = 0)[1, "R2"]
-  expect_equal(AmpliPub:::ap_screen_r2(g, m = m), ref, tolerance = 1e-10)
-
-  age <- meta$age
-  ref <- vegan::adonis2(d ~ age, data = data.frame(age = age), permutations = 0)[1, "R2"]
-  expect_equal(AmpliPub:::ap_screen_r2(age, m = m), ref, tolerance = 1e-10)
-
-  # A Gower matrix built on all samples is wrong once a sample is missing. The
-  # function must notice and rebuild rather than reuse it.
+  m <- as.matrix(f$beta$distances$bray_curtis)
+  g <- factor(f$beta$metadata[rownames(m), "group"])
   g[1:3] <- NA
   keep <- !is.na(g)
   dd <- stats::as.dist(m[keep, keep])
-  ref <- vegan::adonis2(dd ~ g, data = data.frame(g = g[keep]), permutations = 0)[1, "R2"]
-  stale <- AmpliPub:::ap_gower(m)
-  expect_equal(AmpliPub:::ap_screen_r2(g, G = stale, m = m), ref, tolerance = 1e-10)
+  ref <- vegan::adonis2(dd ~ g, data = data.frame(g = droplevels(g[keep])),
+                        permutations = 0)[1, "R2"]
+  expect_equal(ap_screen_r2(g, m), ref)
+  expect_true(is.na(ap_screen_r2(factor(rep("a", nrow(m))), m)))
 })
 
 test_that("the screen plot builds", {
