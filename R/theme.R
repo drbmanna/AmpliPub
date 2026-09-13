@@ -73,7 +73,9 @@ ap_metric_label <- function(metric) {
     q2 = "Hill q2\n(dominant-weighted)",
     evenness = "Pielou's evenness",
     faith_pd = "Faith's PD",
-    shannon_entropy = "Shannon entropy (bits)"
+    shannon_entropy = "Shannon entropy (bits)",
+    chao1 = "Chao1\n(estimated richness)",
+    ace = "ACE\n(estimated richness)"
   )
   out <- unname(labels[metric])
   ifelse(is.na(out), metric, out)

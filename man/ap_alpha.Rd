@@ -10,14 +10,15 @@ ap_alpha(
   rarefy = TRUE,
   depth = NULL,
   n_iter = 100L,
-  seed = 1L
+  seed = 1L,
+  force = FALSE
 )
 }
 \arguments{
 \item{x}{A \code{TreeSummarizedExperiment} from \code{\link[=ap_import]{ap_import()}}.}
 
 \item{metrics}{Which metrics to compute. Any of \code{"q0"}, \code{"q1"}, \code{"q2"},
-\code{"evenness"}, \code{"faith_pd"}, \code{"shannon_entropy"}.}
+\code{"evenness"}, \code{"faith_pd"}, \code{"shannon_entropy"}, \code{"chao1"}, \code{"ace"}.}
 
 \item{rarefy}{Rarefy to a common depth before computing. Default \code{TRUE}.}
 
@@ -28,6 +29,9 @@ deeper cutoffs against the samples they cost.}
 \item{n_iter}{Rarefaction iterations to average over. Default \code{100}.}
 
 \item{seed}{Random seed, recorded with the result.}
+
+\item{force}{Compute \code{chao1} and \code{ace} even when the table has no singletons
+or looks rarefied. Default \code{FALSE}. See the section on Chao1 and ACE.}
 }
 \value{
 An object of class \code{ap_alpha}: a list with \code{values} (a data frame of
@@ -58,5 +62,26 @@ statistic is exactly 1.0 for every sample regardless of how shallow the
 sequencing was. It is not a coverage estimate on this data, it is a
 restatement of how the table was built. \code{\link[=ap_goods_coverage]{ap_goods_coverage()}} computes it and
 refuses when singletons are absent.
+}
+
+\section{Chao1 and ACE refuse in two situations}{
+
+Both estimate unseen richness from the features seen once (singletons) and
+twice. Both are computed by \code{vegan::estimateR}: \code{chao1} is its bias-corrected
+Chao1, \code{S_obs + F1(F1 - 1) / (2(F2 + 1))}, and \code{ace} uses its rare-abundance
+threshold of 10. AmpliPub adds only the refusal below.
+\enumerate{
+\item \strong{No singletons anywhere.} Denoised tables (DADA2, Deblur) have none by
+design, and both estimators then equal \code{q0} exactly, so they would report
+observed richness under another name.
+\item \strong{Every sample has the same depth.} That is what a rarefied table looks
+like. Subsampling turns counts of 2 into counts of 1 at random, so the
+singletons may be created by rarefaction rather than seen in the data, and
+the estimate grows with them.
+}
+
+The check runs on the table as passed in, before any rarefaction, so
+\code{rarefy = TRUE} on a denoised table still refuses. \code{force = TRUE} computes
+the values anyway, with a warning that names the rule it overrode.
 }
 

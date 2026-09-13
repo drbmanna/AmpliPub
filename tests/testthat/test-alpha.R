@@ -93,7 +93,7 @@ test_that("not rarefying unequal depths warns that q0 tracks depth", {
 
 test_that("an unknown metric is refused by name", {
   x <- ap_fixture_object(tree = FALSE, taxonomy = FALSE)
-  expect_error(ap_alpha(x, metrics = "chao1"), "chao1")
+  expect_error(ap_alpha(x, metrics = "shannon"), "shannon")
 })
 
 test_that("Faith's PD is dropped with a warning when there is no tree", {
@@ -120,6 +120,86 @@ test_that("Good's coverage computes when singletons are present", {
   cov <- ap_goods_coverage(x)
   expect_equal(unname(cov["s1"]), 1 - 2 / 100)
   expect_equal(unname(cov["s2"]), 1)
+})
+
+# --- Chao1 and ACE ---
+
+# Unequal depths and a long rare tail, so singletons are real rather than
+# produced by subsampling.
+ap_singleton_table <- function() {
+  set.seed(8)
+  m <- vapply(c(800, 1200, 1500, 2000), function(d) {
+    stats::rmultinom(1, d, stats::rgamma(60, shape = 0.3, rate = 0.01) + 0.01)[, 1]
+  }, numeric(60))
+  dimnames(m) <- list(sprintf("f%02d", 1:60), sprintf("s%d", 1:4))
+  m[rowSums(m) > 0, ]
+}
+ap_singleton_meta <- function() {
+  data.frame(g = c("a", "a", "b", "b"), row.names = sprintf("s%d", 1:4))
+}
+
+test_that("Chao1 reaches ap_alpha from vegan on the right sample, checked by hand", {
+  # The estimate itself is vegan's. What is ours is the wiring: transposing the
+  # table and picking the right row and column. Sample s1 has counts
+  # 1, 1, 1, 2, 5, so S_obs = 5, F1 = 3, F2 = 1 and Chao1 = 5 + 3 * 2 / (2 * 2) = 6.5.
+  # Sample s2 holds no singletons, so Chao1 = S_obs = 3.
+  m <- matrix(c(1, 1, 1, 2, 5, 0,
+                0, 4, 0, 7, 0, 3), ncol = 2,
+              dimnames = list(paste0("f", 1:6), c("s1", "s2")))
+  x <- ap_import(m, data.frame(g = c("a", "b"), row.names = c("s1", "s2")))
+  a <- suppressWarnings(ap_alpha(x, metrics = c("chao1", "ace"), rarefy = FALSE))
+  v <- a$values[a$values$metric == "chao1", ]
+  expect_equal(v$value[v$sample_id == "s1"], 6.5)
+  expect_equal(v$value[v$sample_id == "s2"], 3)
+  expect_true(all(a$values$metric[is.na(a$values$value)] == "ace"))
+})
+
+test_that("with no singletons Chao1 and ACE are refused, and when forced they equal q0", {
+  counts <- ap_fixture_counts(n_features = 15L, n_per_group = 4L, depth = 2000)
+  counts[counts == 1] <- 2
+  x <- ap_import(counts, ap_fixture_metadata(counts))
+  expect_error(ap_alpha(x, metrics = "chao1", rarefy = FALSE), "No feature has a count of 1")
+  expect_error(ap_alpha(x, metrics = "ace", rarefy = FALSE), "DADA2 and Deblur")
+
+  a <- suppressWarnings(ap_alpha(x, metrics = c("q0", "chao1", "ace"), rarefy = FALSE,
+                                 force = TRUE))
+  w <- split(a$values$value, a$values$metric)
+  expect_equal(w$chao1, w$q0)
+  expect_equal(w$ace, w$q0)
+})
+
+test_that("an equal-depth table is refused because rarefaction makes singletons", {
+  set.seed(9)
+  r <- ap_rarefy_matrix(ap_singleton_table(), 700)
+  expect_gt(sum(r == 1), 0)
+  x <- ap_import(r, ap_singleton_meta())
+  expect_error(ap_alpha(x, metrics = "chao1", rarefy = FALSE), "rarefied table")
+  expect_warning(a <- ap_alpha(x, metrics = "chao1", rarefy = FALSE, force = TRUE),
+                 "equal-depth")
+  expect_true(all(is.finite(a$values$value)))
+})
+
+test_that("real singletons at unequal depths give estimates at or above observed richness", {
+  m <- ap_singleton_table()
+  expect_gt(sum(m == 1), 0)
+  x <- ap_import(m, ap_singleton_meta())
+  a <- suppressWarnings(ap_alpha(x, metrics = c("q0", "chao1", "ace"), rarefy = FALSE))
+  w <- split(a$values$value, a$values$metric)
+  expect_true(all(w$chao1 >= w$q0))
+  expect_true(all(w$ace >= w$q0, na.rm = TRUE))
+  expect_gt(max(w$chao1 - w$q0), 0)
+})
+
+test_that("rarefying a singleton-free table is refused before the subsamples make singletons", {
+  counts <- ap_fixture_counts(n_features = 30L, n_per_group = 4L, depth = 3000)
+  counts[counts == 1] <- 2
+  x <- ap_import(counts, ap_fixture_metadata(counts))
+  # The subsamples would hold singletons the table never had...
+  set.seed(1)
+  expect_gt(sum(ap_rarefy_matrix(SummarizedExperiment::assay(x, "counts"), 500) == 1), 0)
+  # ...and the guard looks before rarefying, so it still refuses.
+  expect_error(ap_alpha(x, metrics = "chao1", depth = 500, n_iter = 2L),
+               "No feature has a count of 1")
 })
 
 # --- depth candidates ---
