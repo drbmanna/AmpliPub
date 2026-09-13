@@ -47,6 +47,7 @@ Suggests:
     Maaslin2,
     MicrobiomeStat,
     microbiome,
+    metagenomeSeq,
     lme4,
     rstatix,
     withr,
