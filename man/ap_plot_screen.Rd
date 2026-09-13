@@ -16,6 +16,7 @@ A ggplot object.
 }
 \description{
 Effect size for the top rows of an \code{\link[=ap_screen]{ap_screen()}} result, with the stability
-of each rank written next to it. The x axis is variance explained, so the
-figure carries the ranking the screen uses and never a p-value ranking.
+of each rank written next to it. The x axis is variance explained adjusted
+for degrees of freedom, so the figure carries the ranking the screen uses and
+never a p-value ranking.
 }

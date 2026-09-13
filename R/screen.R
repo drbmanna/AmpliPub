@@ -20,12 +20,20 @@
 #' how stable each rank is when the samples are subsampled.
 #'
 #' @section Ranking:
-#' Rows are ordered by variance explained, never by p. Beta rows use the
-#' PERMANOVA R2. Alpha rows use epsilon squared (Kruskal-Wallis) for categorical
-#' variables and Spearman rho squared for numeric ones. These are all
-#' proportions of variance, but not of the same variance: R2 partitions distance
-#' sums of squares and epsilon squared partitions rank variance. Order within a
-#' family is exact; order across families is approximate.
+#' Rows are ordered by variance explained adjusted for degrees of freedom,
+#' never by p. Raw R2 is biased upward: with no effect at all its expectation is
+#' about `df / (n - 1)`, so a variable with many levels, or one recorded on few
+#' samples, outranks a real two-group effect on the raw scale. Beta rows are
+#' therefore ranked on adjusted PERMANOVA R2, `1 - (1 - R2)(n - 1)/(n - df - 1)`,
+#' and numeric alpha rows on the same adjustment of Spearman rho squared.
+#' Categorical alpha rows use epsilon squared (Kruskal-Wallis), which already
+#' subtracts the null expectation of H. Raw values stay in `effect`, adjusted
+#' ones in `effect_adj`.
+#'
+#' These are all proportions of variance, but not of the same variance: R2
+#' partitions distance sums of squares and epsilon squared partitions rank
+#' variance. Order within a family is exact; order across families is
+#' approximate.
 #'
 #' @section Multiple testing:
 #' One Benjamini-Hochberg correction is applied across every test the screen
@@ -129,8 +137,9 @@ ap_screen <- function(alpha = NULL,
         }
         rows[[length(rows) + 1L]] <- data.frame(
           family = "alpha", metric = m, variable = v, type = type, test = e$test,
-          n = e$n, statistic = e$statistic, effect_name = e$effect_name,
-          effect = e$effect, p = e$p, dispersion_p = NA_real_, verdict = NA_character_,
+          n = e$n, df = e$df, statistic = e$statistic, effect_name = e$effect_name,
+          effect = e$effect, effect_adj = e$effect_adj, p = e$p,
+          dispersion_p = NA_real_, verdict = NA_character_,
           stringsAsFactors = FALSE)
         specs[[length(specs) + 1L]] <- list(family = "alpha", metric = m, ids = names(y),
                                             y = unname(y), g = g, type = type)
@@ -177,10 +186,15 @@ ap_screen <- function(alpha = NULL,
                  "on the wrong quantity, so the screen stops.")
         )
 
+        # The subsamples derive df from the grouping; the full-data df comes from
+        # adonis2. They must agree or the adjusted scale differs between the two.
+        ap_assert(isTRUE(r$df == ap_screen_df(g)),
+                  "adonis2 reports {r$df} df for `{v}` on {m} but the grouping implies {ap_screen_df(g)}.")
+
         rows[[length(rows) + 1L]] <- data.frame(
           family = "beta", metric = m, variable = v, type = type,
-          test = "PERMANOVA", n = r$n, statistic = r$pseudo_F, effect_name = "R2",
-          effect = r$R2, p = r$p,
+          test = "PERMANOVA", n = r$n, df = r$df, statistic = r$pseudo_F, effect_name = "R2",
+          effect = r$R2, effect_adj = ap_adjust_r2(r$R2, r$n, r$df), p = r$p,
           dispersion_p = if (nrow(d) == 0L) NA_real_ else d$dispersion_p[1],
           verdict = if (nrow(it) == 0L) NA_character_ else it$verdict[1],
           stringsAsFactors = FALSE)
@@ -198,7 +212,7 @@ ap_screen <- function(alpha = NULL,
             paste0("`top_k` ({top_k}) must be smaller than the number of tests ({n_tests}). ",
                    "Otherwise every test is in the top k and stability is 1 by construction."))
 
-  ord <- order(results$effect, decreasing = TRUE)
+  ord <- order(results$effect_adj, decreasing = TRUE)
   results <- results[ord, , drop = FALSE]
   specs <- specs[ord]
 
@@ -207,8 +221,8 @@ ap_screen <- function(alpha = NULL,
   results$median_rank <- stab$median_rank
   results$rank <- seq_len(n_tests)
   rownames(results) <- NULL
-  results <- results[, c("rank", "family", "metric", "variable", "type", "test", "n",
-                         "statistic", "effect_name", "effect", "p", "q", "stability",
+  results <- results[, c("rank", "family", "metric", "variable", "type", "test", "n", "df",
+                         "statistic", "effect_name", "effect", "effect_adj", "p", "q", "stability",
                          "median_rank", "dispersion_p", "verdict")]
 
   by_variable <- do.call(rbind, lapply(unique(results$variable), function(v) {
@@ -217,7 +231,8 @@ ap_screen <- function(alpha = NULL,
     data.frame(
       variable = v, type = results$type[j[1]],
       best_family = results$family[j[1]], best_metric = results$metric[j[1]],
-      best_effect_name = results$effect_name[j[1]], best_effect = results$effect[j[1]],
+      best_effect_name = results$effect_name[j[1]], best_effect = results$effect_adj[j[1]],
+      best_effect_raw = results$effect[j[1]],
       n_tests = length(j), n_q05 = sum(results$q[j] < 0.05),
       stability = mean(colSums(in_top) > 0),
       stringsAsFactors = FALSE)
@@ -295,7 +310,8 @@ ap_screen_alpha_effect <- function(y, g, type) {
   categorical <- type == "categorical"
   out <- list(test = if (categorical) "Kruskal-Wallis" else "Spearman",
               effect_name = if (categorical) "epsilon squared" else "rho squared",
-              n = n, statistic = NA_real_, effect = NA_real_, p = NA_real_)
+              n = n, df = NA_real_, statistic = NA_real_, effect = NA_real_,
+              effect_adj = NA_real_, p = NA_real_)
 
   if (categorical) {
     g <- droplevels(factor(g))
@@ -305,6 +321,10 @@ ap_screen_alpha_effect <- function(y, g, type) {
     if (is.null(ht)) return(out)
     out$statistic <- unname(ht$statistic)
     out$effect <- ap_epsilon_squared_point(out$statistic, n, k)
+    out$df <- k - 1
+    # Epsilon squared already subtracts the null expectation of H, which is
+    # k - 1, so it needs no further adjustment.
+    out$effect_adj <- out$effect
     out$p <- ht$p.value
   } else {
     if (n < 4L || length(unique(y)) < 2L || length(unique(g)) < 2L) return(out)
@@ -313,6 +333,8 @@ ap_screen_alpha_effect <- function(y, g, type) {
     if (is.null(ct)) return(out)
     out$statistic <- unname(ct$estimate)
     out$effect <- out$statistic^2
+    out$df <- 1
+    out$effect_adj <- ap_adjust_r2(out$effect, n, 1)
     out$p <- ct$p.value
   }
   out
@@ -358,6 +380,21 @@ ap_screen_r2 <- function(g, G = NULL, m = NULL) {
   ap_model_r2(G, stats::model.matrix(~ g))
 }
 
+# Adjusted R2. Raw R2 has a null expectation of about df / (n - 1), which is
+# what lets a many-level or small-n variable outrank a real effect.
+#' @keywords internal
+ap_adjust_r2 <- function(r2, n, df) {
+  denom <- n - df - 1
+  ifelse(denom > 0, 1 - (1 - r2) * (n - 1) / denom, NA_real_)
+}
+
+# Degrees of freedom a single term uses, from its non-missing values.
+#' @keywords internal
+ap_screen_df <- function(g) {
+  g <- g[!is.na(g)]
+  if (is.factor(g)) nlevels(droplevels(g)) - 1L else 1L
+}
+
 #' @keywords internal
 ap_screen_stability <- function(specs, mats, n_resample, fraction, top_k, seed) {
   universe <- sort(unique(unlist(lapply(specs, `[[`, "ids"))))
@@ -376,11 +413,13 @@ ap_screen_stability <- function(specs, mats, n_resample, fraction, top_k, seed) 
       s <- specs[[j]]
       idx <- which(s$ids %in% sub)
       if (s$family == "alpha") {
-        eff[j, b] <- ap_screen_alpha_effect(s$y[idx], s$g[idx], s$type)$effect
+        eff[j, b] <- ap_screen_alpha_effect(s$y[idx], s$g[idx], s$type)$effect_adj
       } else {
         msub <- mats[[s$metric]][idx, idx, drop = FALSE]
         if (is.null(gower_cache[[s$metric]])) gower_cache[[s$metric]] <- ap_gower(msub)
-        eff[j, b] <- ap_screen_r2(s$g[idx], G = gower_cache[[s$metric]], m = msub)
+        gs <- s$g[idx]
+        r2 <- ap_screen_r2(gs, G = gower_cache[[s$metric]], m = msub)
+        eff[j, b] <- ap_adjust_r2(r2, sum(!is.na(gs)), ap_screen_df(gs))
       }
     }
   }
@@ -410,7 +449,8 @@ print.ap_screen <- function(x, n = 20L, ...) {
                         "Read q, and read the effect size before either."),
                  x$expected_false_positives)
   cli::cli_alert_warning("{msg}")
-  msg <- sprintf(paste0("Ranked by variance explained, not by p. Stability is the share of %d ",
+  msg <- sprintf(paste0("Ranked by variance explained adjusted for degrees of freedom, not by p. ",
+                        "Stability is the share of %d ",
                         "subsamples (%.0f%% of samples, without replacement, seed %s) in which ",
                         "the row ranks in the top %d."),
                  x$n_resample, 100 * x$fraction, x$seed, x$top_k)
@@ -422,7 +462,8 @@ print.ap_screen <- function(x, n = 20L, ...) {
     variable = r$variable,
     family = r$family,
     metric = r$metric,
-    effect = sprintf("%s %.4f", ap_effect_abbrev(r$effect_name), r$effect),
+    adjusted = sprintf("%s %.4f", ap_effect_abbrev(r$effect_name), r$effect_adj),
+    raw = sprintf("%.4f", r$effect),
     p = format.pval(r$p, digits = 2),
     q = format.pval(r$q, digits = 2),
     stable = sprintf("%.0f%%", 100 * r$stability),
@@ -461,6 +502,10 @@ print.ap_screen <- function(x, n = 20L, ...) {
   }
 
   cli::cli_text("")
+  cli::cli_alert_info(paste0(
+    "Raw R2 and rho2 sit near df/(n-1) even with no effect, which favours many-level and ",
+    "small-n variables. The ranking uses the adjusted values; raw ones are shown for reference."
+  ))
   cli::cli_alert_info(paste0(
     "R2 partitions distance sums of squares and eps2 or rho2 partition rank variance. ",
     "Both are variance explained, not the same variance, so order across families is approximate."

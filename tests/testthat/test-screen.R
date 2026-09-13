@@ -31,7 +31,7 @@ test_that("one BH correction runs across the whole screen and the test count is 
   expect_equal(nrow(s$results), s$n_tests)
   expect_equal(s$results$q, stats::p.adjust(s$results$p, method = "BH"))
   expect_equal(s$expected_false_positives, 0.05 * 12)
-  expect_equal(s$results$effect, sort(s$results$effect, decreasing = TRUE))
+  expect_equal(s$results$effect_adj, sort(s$results$effect_adj, decreasing = TRUE))
 })
 
 test_that("printing states the test count and that the screen is hypothesis-generating", {
@@ -154,4 +154,41 @@ test_that("the screen plot builds", {
   expect_s3_class(p, "ggplot")
   expect_no_error(ggplot2::ggplot_build(p))
   expect_error(ap_plot_screen(list()), "must come from")
+})
+
+test_that("a null variable with many levels does not outrank a real two-level effect", {
+  # Found on Baxter: raw R2 has a null expectation near df/(n - 1). Here a
+  # 250-level variable with no effect sits near 0.25 raw, above a planted
+  # two-group effect near 0.14. Ranking on raw R2 puts noise first; the
+  # adjusted scale must not.
+  #
+  # Sized so a single draw decides it. At n = 200 with 50 levels the null's
+  # adjusted R2 has sd 0.055 over label permutations (checked), so one draw
+  # landed 2 sd high and outranked the real effect. At n = 1000 both
+  # comparisons below sit about 5 sd from failing.
+  set.seed(404)
+  n <- 1000L
+  real <- rep(c("a", "b"), each = n / 2)
+  y <- stats::rnorm(n) + ifelse(real == "b", 0.8, 0)
+  meta <- data.frame(real = real,
+                     many = sample(rep(sprintf("L%03d", 1:250), each = 4)),
+                     row.names = sprintf("S%04d", seq_len(n)), stringsAsFactors = FALSE)
+  d <- stats::dist(matrix(y, ncol = 1, dimnames = list(rownames(meta), NULL)))
+  beta <- structure(list(distances = list(euclidean = d), metrics = "euclidean",
+                         rarefied = FALSE, depth = NA_real_, seed = NA_integer_,
+                         dropped = character(0), pseudocount = NA_real_,
+                         n_samples = n, metadata = meta),
+                    class = "ap_beta")
+
+  # No assertion here reads a p-value, so permutations are kept minimal; at
+  # n = 1000 with 250 levels each one is expensive.
+  s <- ap_screen(beta = beta, permutations = 19L, n_resample = 10L, top_k = 1L,
+                 max_levels = 300L)
+  r <- s$results
+  # The fixture does what it claims: noise wins on the raw scale...
+  expect_gt(r$effect[r$variable == "many"], r$effect[r$variable == "real"])
+  # ...and the ranking does not follow it.
+  expect_equal(r$variable[1], "real")
+  expect_equal(r$df[r$variable == "many"], 249)
+  expect_equal(r$effect_adj, 1 - (1 - r$effect) * (r$n - 1) / (r$n - r$df - 1))
 })

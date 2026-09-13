@@ -56,12 +56,20 @@ how stable each rank is when the samples are subsampled.
 }
 \section{Ranking}{
 
-Rows are ordered by variance explained, never by p. Beta rows use the
-PERMANOVA R2. Alpha rows use epsilon squared (Kruskal-Wallis) for categorical
-variables and Spearman rho squared for numeric ones. These are all
-proportions of variance, but not of the same variance: R2 partitions distance
-sums of squares and epsilon squared partitions rank variance. Order within a
-family is exact; order across families is approximate.
+Rows are ordered by variance explained adjusted for degrees of freedom,
+never by p. Raw R2 is biased upward: with no effect at all its expectation is
+about \code{df / (n - 1)}, so a variable with many levels, or one recorded on few
+samples, outranks a real two-group effect on the raw scale. Beta rows are
+therefore ranked on adjusted PERMANOVA R2, \code{1 - (1 - R2)(n - 1)/(n - df - 1)},
+and numeric alpha rows on the same adjustment of Spearman rho squared.
+Categorical alpha rows use epsilon squared (Kruskal-Wallis), which already
+subtracts the null expectation of H. Raw values stay in \code{effect}, adjusted
+ones in \code{effect_adj}.
+
+These are all proportions of variance, but not of the same variance: R2
+partitions distance sums of squares and epsilon squared partitions rank
+variance. Order within a family is exact; order across families is
+approximate.
 }
 
 \section{Multiple testing}{
