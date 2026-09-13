@@ -1,0 +1,7 @@
+name: amplipub-snakemake
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.12
+  - snakemake-minimal=9.26.1

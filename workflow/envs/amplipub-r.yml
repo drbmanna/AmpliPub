@@ -1,0 +1,51 @@
+# R and every package AmpliPub imports or its tests suggest, pinned to exact versions.
+# Each version was confirmed on conda-forge or bioconda on 2026-09-13. AmpliPub itself is
+# installed into this env from the repository checkout by setup_envs.sh.
+name: amplipub-r
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults
+dependencies:
+  - r-base=4.5.3
+  # Bioconductor
+  - bioconductor-mia=1.18.0
+  # mia 1.18.0 imports rbiom::unifrac, which rbiom 3 removed (it has bdiv_matrix instead).
+  # Unpinned, the solver picks rbiom 3.1.0 and mia fails to load (found 2026-09-13).
+  # 2.2.1 is the version whose weighted UniFrac was checked against QIIME 2 and scikit-bio.
+  - r-rbiom=2.2.1
+  - bioconductor-treesummarizedexperiment=2.18.0
+  - bioconductor-summarizedexperiment=1.40.0
+  - bioconductor-s4vectors=0.48.0
+  - bioconductor-biostrings=2.78.0
+  - bioconductor-biomformat=1.38.0
+  - bioconductor-ancombc=2.14.0
+  - bioconductor-maaslin2=1.22.0
+  - bioconductor-aldex2=1.42.0
+  - bioconductor-microbiome=1.32.0
+  - bioconductor-metagenomeseq=1.52.0
+  # CRAN
+  - r-vegan=2.7_5
+  - r-ape=5.8_1
+  - r-permute=0.9_10
+  # 1.7_6 has no R 4.5 build; r-lme4 2.0_6 requires 1.7_5 (conda solver, 2026-09-13).
+  - r-matrix=1.7_5
+  - r-boot=1.3_32
+  - r-cli=3.6.6
+  - r-rlang=1.3.0
+  - r-ggplot2=4.0.3
+  - r-scales=1.4.0
+  - r-ggrepel=0.9.8
+  - r-microbiomestat=1.4
+  - r-lme4=2.0_6
+  - r-rstatix=1.1.0
+  - r-zip=3.0.2
+  - r-withr=3.0.3
+  - r-testthat=3.3.2
+  - r-yaml=2.3.12
+  # Building the package and the report
+  - r-devtools=2.5.2
+  - r-remotes=2.5.0
+  - r-rmarkdown=2.32
+  - r-knitr=1.52
+  - pandoc=3.11
