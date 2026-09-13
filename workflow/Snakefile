@@ -1,0 +1,393 @@
+# AmpliPub end-to-end workflow: raw reads to report.
+#
+# Each stage script in workflow/ is called unchanged, with the arguments its README
+# documents. The QIIME 2 and QC stages enter their conda environments themselves
+# (`conda run -n <env>`), so those rules carry no conda directive and `conda` must be on
+# PATH. Only the R analysis and the report run in a Snakemake-managed environment: the
+# named env amplipub-r, which is where setup_envs.sh installs AmpliPub from this checkout.
+#
+# Run from the repository root:
+#   snakemake -s workflow/Snakefile --configfile /path/to/config.yaml --sdm conda --cores 12
+# Dry run (prints every job, runs nothing):
+#   snakemake -s workflow/Snakefile --configfile /path/to/config.yaml -n
+
+import shlex
+import sys
+from pathlib import Path
+
+from snakemake.utils import validate
+
+validate(config, str(Path(workflow.basedir) / "config" / "schema.yaml"))
+
+WF = Path(workflow.basedir)
+PY = sys.executable
+OUT = Path(config["outdir"])
+RAW = Path(config["fetch"]["outdir"]) if config["fetch"]["outdir"] else OUT / "raw"
+Q2 = OUT / "q2"
+LOGS = OUT / "logs"
+BENCH = OUT / "benchmarks"
+ENV = config["envs"]
+MOCK = config["mock"]["samples"]
+CLASSIFIER = config["classifier"]["name"]
+USE_MOCK_REF = bool(MOCK) or config["resolution"]["run"]
+Q = shlex.quote
+
+
+def checked_file_args(ref):
+    """Arguments for fetch_verified.py from a {url|path, sha256} config entry."""
+    source = f"--url {Q(ref['url'])}" if ref.get("url") else f"--path {Q(ref['path'])}"
+    return f"{source} --sha256 {ref['sha256']}"
+
+
+def optional(flag, value):
+    """A flag with a value, or nothing when the value is unset."""
+    return f"{flag} {Q(str(value))}" if value not in (None, "", []) else ""
+
+
+def switch(flag, on):
+    return flag if on else ""
+
+
+if USE_MOCK_REF and "mock" not in config["references"]:
+    raise ValueError("mock samples or the resolution stage are configured, "
+                     "but references.mock is missing")
+
+
+rule all:
+    input:
+        str(OUT / "report" / "report.html"),
+        str(OUT / "provenance" / "environments.done"),
+        str(OUT / "qc_raw" / "qc_summary.tsv") if config["qc"]["run"] else [],
+        str(Q2 / "mock" / "mock_summary.tsv") if MOCK else [],
+        str(OUT / "resolution" / "resolution_summary.tsv") if config["resolution"]["run"] else [],
+
+
+# --- inputs the workflow did not produce, each checked against its sha256 -----------------
+
+rule reference_metadata:
+    output: str(OUT / "inputs" / "metadata.tsv")
+    log: str(LOGS / "reference_metadata.log")
+    params: py=PY, wf=WF, src=checked_file_args(config["references"]["metadata"])
+    shell: "{params.py} {params.wf}/scripts/fetch_verified.py {params.src} -o {output} > {log} 2>&1"
+
+
+if USE_MOCK_REF:
+    rule reference_mock:
+        output: str(OUT / "inputs" / "mock_reference.fasta")
+        log: str(LOGS / "reference_mock.log")
+        params: py=PY, wf=WF, src=checked_file_args(config["references"]["mock"])
+        shell: "{params.py} {params.wf}/scripts/fetch_verified.py {params.src} -o {output} > {log} 2>&1"
+
+
+rule classifier:
+    output: str(OUT / "inputs" / "classifier.qza")
+    log: str(LOGS / "classifier.log")
+    params:
+        py=PY, wf=WF,
+        src=checked_file_args({"path": config["classifier"]["path"],
+                               "sha256": config["classifier"]["sha256"]}),
+    shell: "{params.py} {params.wf}/scripts/fetch_verified.py {params.src} --link -o {output} > {log} 2>&1"
+
+
+# --- 00: reads -----------------------------------------------------------------------------
+
+rule fetch_sra:
+    output:
+        manifest=str(RAW / "manifest.tsv"),
+        run_map=str(RAW / "run_to_sample.tsv"),
+    log: str(LOGS / "00_fetch_sra.log")
+    benchmark: str(BENCH / "00_fetch_sra.tsv")
+    threads: config["threads"]["fetch"]
+    params:
+        py=PY, wf=WF, raw=RAW,
+        args=" ".join(filter(None, [
+            Q(config["fetch"]["accession"]),
+            optional("--runs", config["fetch"]["runs_file"]),
+            optional("--expect-runs", config["fetch"]["expect_runs"]),
+            switch("--sra-fallback", config["fetch"]["sra_fallback"]),
+        ])),
+    shell:
+        "{params.py} {params.wf}/00_fetch_sra.py {params.args} -o {params.raw} "
+        "--threads {threads} > {log} 2>&1"
+
+
+rule qc_raw:
+    input: rules.fetch_sra.output.manifest
+    output: str(OUT / "qc_raw" / "qc_summary.tsv")
+    log: str(LOGS / "00_qc_raw.log")
+    benchmark: str(BENCH / "00_qc_raw.tsv")
+    threads: config["threads"]["qc"]
+    params: py=PY, wf=WF, fastq=RAW / "fastq", outdir=OUT / "qc_raw", env=ENV["qc"]
+    shell:
+        "{params.py} {params.wf}/00_qc_raw.py -i {params.fastq} -o {params.outdir} "
+        "--threads {threads} --env {params.env} > {log} 2>&1"
+
+
+rule import_demux:
+    input: rules.fetch_sra.output.manifest
+    output: str(Q2 / "demux.qza")
+    log: str(LOGS / "import_demux.log")
+    benchmark: str(BENCH / "import_demux.tsv")
+    params: env=ENV["qiime2"]
+    shell:
+        "conda run -n {params.env} qiime tools import "
+        "--type 'SampleData[PairedEndSequencesWithQuality]' "
+        "--input-path {input} --output-path {output} "
+        "--input-format PairedEndFastqManifestPhred33V2 > {log} 2>&1 </dev/null"
+
+
+# --- 01-03: primers, quality, denoising ----------------------------------------------------
+
+rule primers:
+    input: rules.import_demux.output
+    output:
+        trimmed=str(Q2 / "primers" / "trimmed.qza"),
+        summary=str(Q2 / "primers" / "primer_summary.tsv"),
+    log: str(LOGS / "01_primers.log")
+    benchmark: str(BENCH / "01_primers.tsv")
+    threads: config["threads"]["primers"]
+    params:
+        py=PY, wf=WF, outdir=Q2 / "primers", env=ENV["qiime2"], qc_env=ENV["qc"],
+        args=" ".join(filter(None, [
+            f"--primer-f {config['primers']['forward']}",
+            f"--primer-r {config['primers']['reverse']}",
+            switch("--discard-untrimmed", config["primers"]["discard_untrimmed"]),
+        ])),
+    shell:
+        "{params.py} {params.wf}/01_primers.py -i {input} -o {params.outdir} {params.args} "
+        "--cores {threads} --env {params.env} --qc-env {params.qc_env} > {log} 2>&1"
+
+
+rule quality:
+    input: rules.primers.output.trimmed
+    output: str(Q2 / "quality" / "trunc_len.tsv")
+    log: str(LOGS / "02_quality.log")
+    benchmark: str(BENCH / "02_quality.tsv")
+    params:
+        py=PY, wf=WF, outdir=Q2 / "quality", env=ENV["qiime2"], q=config["quality"],
+    shell:
+        "{params.py} {params.wf}/02_quality.py -i {input} -o {params.outdir} "
+        "--min-q {params.q[min_q]} --amplicon-len {params.q[amplicon_len]} "
+        "--min-overlap {params.q[min_overlap]} --margin {params.q[margin]} --n {params.q[n]} "
+        "--env {params.env} > {log} 2>&1"
+
+
+rule dada2:
+    input:
+        reads=rules.primers.output.trimmed,
+        trunc=rules.quality.output,
+    output:
+        table=str(Q2 / "dada2" / "table.qza"),
+        rep_seqs=str(Q2 / "dada2" / "rep_seqs.qza"),
+        stats=str(Q2 / "dada2" / "dada2_stats.tsv"),
+    log: str(LOGS / "03_dada2.log")
+    benchmark: str(BENCH / "03_dada2.tsv")
+    threads: config["threads"]["dada2"]
+    params:
+        py=PY, wf=WF, outdir=Q2 / "dada2", env=ENV["qiime2"],
+        zero=switch("--allow-zero-read-samples", config["dada2"]["allow_zero_read_samples"]),
+    shell:
+        "{params.py} {params.wf}/03_dada2.py -i {input.reads} -t {input.trunc} -o {params.outdir} "
+        "--threads {threads} {params.zero} --env {params.env} > {log} 2>&1"
+
+
+# --- 04-06: mock check, taxonomy, region resolution ----------------------------------------
+
+if MOCK:
+    rule mock:
+        input:
+            table=rules.dada2.output.table,
+            rep_seqs=rules.dada2.output.rep_seqs,
+            reference=rules.reference_mock.output,
+        output:
+            summary=str(Q2 / "mock" / "mock_summary.tsv"),
+            targets=str(Q2 / "mock" / "targets.tsv"),
+        log: str(LOGS / "04_mock.log")
+        benchmark: str(BENCH / "04_mock.tsv")
+        params:
+            py=PY, wf=WF, outdir=Q2 / "mock", env=ENV["qiime2"], samples=",".join(MOCK),
+        shell:
+            "{params.py} {params.wf}/04_mock.py -b {input.table} -r {input.rep_seqs} "
+            "-m {input.reference} -s {params.samples} -o {params.outdir} "
+            "--env {params.env} > {log} 2>&1"
+
+
+rule taxonomy:
+    input:
+        rep_seqs=rules.dada2.output.rep_seqs,
+        table=rules.dada2.output.table,
+        classifier=rules.classifier.output,
+        targets=rules.mock.output.targets if MOCK else [],
+    output: str(Q2 / "taxonomy" / f"taxonomy_{CLASSIFIER}.qza")
+    log: str(LOGS / "05_taxonomy.log")
+    benchmark: str(BENCH / "05_taxonomy.tsv")
+    threads: config["threads"]["taxonomy"]
+    params:
+        py=PY, wf=WF, outdir=Q2 / "taxonomy", env=ENV["qiime2"], name=CLASSIFIER,
+        confidence=config["classifier"]["confidence"],
+        targets=lambda wc, input: f"--mock-targets {input.targets}" if input.targets else "",
+    shell:
+        "{params.py} {params.wf}/05_taxonomy.py -r {input.rep_seqs} -b {input.table} "
+        "-c {params.name}={input.classifier} {params.targets} -o {params.outdir} "
+        "--n-jobs {threads} --confidence {params.confidence} --env {params.env} > {log} 2>&1"
+
+
+if config["resolution"]["run"]:
+    rule resolution:
+        input: rules.reference_mock.output
+        output: str(OUT / "resolution" / "resolution_summary.tsv")
+        log: str(LOGS / "06_resolution.log")
+        benchmark: str(BENCH / "06_resolution.tsv")
+        params:
+            py=PY, wf=WF, outdir=OUT / "resolution",
+            args=" ".join(
+                [f"-p {Q(p)}" for p in config["resolution"]["primers"]]
+                + [switch("--full-length", config["resolution"]["full_length"])]
+            ),
+        shell:
+            "{params.py} {params.wf}/06_resolution.py -m {input} {params.args} "
+            "-o {params.outdir} > {log} 2>&1"
+
+
+# --- 07-10: pool runs, filter, tree, diversity ----------------------------------------------
+
+rule collapse:
+    input:
+        table=rules.dada2.output.table,
+        run_map=rules.fetch_sra.output.run_map,
+        metadata=rules.reference_metadata.output,
+    output:
+        table=str(Q2 / "collapsed" / "table_by_sample.qza"),
+        metadata=str(Q2 / "collapsed" / "sample_metadata.tsv"),
+    log: str(LOGS / "07_collapse.log")
+    benchmark: str(BENCH / "07_collapse.tsv")
+    params:
+        py=PY, wf=WF, outdir=Q2 / "collapsed", env=ENV["qiime2"],
+        args=" ".join(filter(None, [
+            f"--group-column {Q(config['collapse']['group_column'])}",
+            optional("--expect-samples", config["collapse"]["expect_samples"]),
+            switch("--sanitize-ids", config["collapse"]["sanitize_ids"]),
+        ])),
+    shell:
+        "{params.py} {params.wf}/07_collapse.py -b {input.table} -r {input.run_map} "
+        "--metadata {input.metadata} {params.args} -o {params.outdir} "
+        "--env {params.env} > {log} 2>&1"
+
+
+rule filter:
+    input:
+        table=rules.collapse.output.table,
+        rep_seqs=rules.dada2.output.rep_seqs,
+        taxonomy=rules.taxonomy.output,
+        metadata=rules.collapse.output.metadata,
+    output:
+        table=str(Q2 / "filtered" / "table_filtered.qza"),
+        rep_seqs=str(Q2 / "filtered" / "rep_seqs_filtered.qza"),
+    log: str(LOGS / "08_filter.log")
+    benchmark: str(BENCH / "08_filter.tsv")
+    params:
+        py=PY, wf=WF, outdir=Q2 / "filtered", env=ENV["qiime2"],
+        args=" ".join(filter(None, [
+            f"--include {Q(config['filter']['include'])}",
+            f"--exclude {Q(config['filter']['exclude'])}",
+            optional("--drop-where", config["filter"]["drop_where"]),
+            f"--min-samples-fraction {config['filter']['min_samples_fraction']}",
+            f"--min-sample-reads {config['filter']['min_sample_reads']}",
+        ])),
+    shell:
+        "{params.py} {params.wf}/08_filter.py -b {input.table} -r {input.rep_seqs} "
+        "-t {input.taxonomy} -m {input.metadata} {params.args} -o {params.outdir} "
+        "--env {params.env} > {log} 2>&1"
+
+
+rule tree:
+    input:
+        rep_seqs=rules.filter.output.rep_seqs,
+        table=rules.filter.output.table,
+    output: str(Q2 / "tree" / "rooted_tree.qza")
+    log: str(LOGS / "09_tree.log")
+    benchmark: str(BENCH / "09_tree.tsv")
+    threads: config["threads"]["tree"]
+    params: py=PY, wf=WF, outdir=Q2 / "tree", env=ENV["qiime2"]
+    shell:
+        "{params.py} {params.wf}/09_tree.py -r {input.rep_seqs} -b {input.table} "
+        "-o {params.outdir} --threads {threads} --env {params.env} > {log} 2>&1"
+
+
+rule diversity:
+    input:
+        table=rules.filter.output.table,
+        tree=rules.tree.output,
+        metadata=rules.collapse.output.metadata,
+        coverage=rules.collapse.output.table,
+    output:
+        settings=str(Q2 / "diversity" / "diversity_settings.tsv"),
+        rarefied=str(Q2 / "diversity" / "core_metrics" / "rarefied_table.qza"),
+    log: str(LOGS / "10_diversity.log")
+    benchmark: str(BENCH / "10_diversity.tsv")
+    threads: config["threads"]["diversity"]
+    params:
+        py=PY, wf=WF, outdir=Q2 / "diversity", env=ENV["qiime2"],
+        args=" ".join(filter(None, [
+            optional("--depth", config["diversity"]["depth"]),
+            switch("--auto-depth", config["diversity"]["auto_depth"]),
+            *[f"--group-column {Q(c)}" for c in config["diversity"]["group_columns"]],
+            f"--iterations {config['diversity']['iterations']}",
+        ])),
+    shell:
+        "{params.py} {params.wf}/10_diversity.py -b {input.table} -p {input.tree} "
+        "-m {input.metadata} --coverage-table {input.coverage} {params.args} "
+        "--threads {threads} -o {params.outdir} --env {params.env} > {log} 2>&1"
+
+
+# --- R: AmpliPub analysis and report -------------------------------------------------------
+
+rule provenance_environments:
+    output: str(OUT / "provenance" / "environments.done")
+    log: str(LOGS / "provenance_environments.log")
+    params:
+        outdir=OUT / "provenance", repo=WF.parent,
+        envs=" ".join(Q(e) for e in (ENV["qiime2"], ENV["qc"], ENV["r"])),
+    shell:
+        """
+        (
+          set -e
+          mkdir -p {params.outdir}
+          for e in {params.envs}; do
+            conda env export -n "$e" --no-builds > {params.outdir}/env_"$e".yml </dev/null
+          done
+          snakemake --version > {params.outdir}/snakemake_version.txt
+          git -C {params.repo} rev-parse HEAD > {params.outdir}/git_commit.txt
+          git -C {params.repo} status --porcelain > {params.outdir}/git_status.txt
+          touch {output}
+        ) > {log} 2>&1
+        """
+
+
+rule amplipub_analysis:
+    input:
+        table=rules.filter.output.table,
+        tree=rules.tree.output,
+        taxonomy=rules.taxonomy.output,
+        metadata=rules.collapse.output.metadata,
+        rarefied=rules.diversity.output.rarefied,
+        diversity_settings=rules.diversity.output.settings,
+    output:
+        results=str(OUT / "amplipub" / "results.rds"),
+        run_info=str(OUT / "amplipub" / "provenance" / "run_info.tsv"),
+    log: str(LOGS / "amplipub_analysis.log")
+    benchmark: str(BENCH / "amplipub_analysis.tsv")
+    threads: config["threads"]["r"]
+    conda: ENV["r"]
+    script: "scripts/run_amplipub.R"
+
+
+rule report:
+    input:
+        results=rules.amplipub_analysis.output.results,
+        run_info=rules.amplipub_analysis.output.run_info,
+        environments=rules.provenance_environments.output,
+    output: str(OUT / "report" / "report.html")
+    log: str(LOGS / "report.log")
+    conda: ENV["r"]
+    script: "scripts/render_report.R"

@@ -38,6 +38,9 @@ scratch/
 __pycache__/
 .pytest_cache/
 
+# Snakemake state, written to the working directory of a run
+.snakemake/
+
 # OS
 .DS_Store
 Thumbs.db

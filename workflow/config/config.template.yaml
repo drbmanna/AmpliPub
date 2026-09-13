@@ -1,0 +1,102 @@
+# AmpliPub workflow configuration template.
+#
+# Copy this file outside the repository, fill in your paths and checksums, and run:
+#   snakemake -s workflow/Snakefile --configfile /path/to/your_config.yaml --sdm conda --cores 12
+#
+# Every value that changes a result lives here. Nothing below is a recommendation for your
+# data: the defaults are the stage scripts' own defaults, and each stage's README section
+# explains what the setting does and why it matters.
+
+outdir: /path/to/results/my_study
+
+envs:
+  qiime2: qiime2-amplicon-2025.7
+  qc: amplipub-qc
+  r: amplipub-r
+
+threads:
+  fetch: 4
+  qc: 4
+  primers: 4
+  dada2: 4
+  taxonomy: 4
+  tree: 4
+  diversity: 4
+  r: 4
+
+fetch:
+  accession: PRJNA000000          # BioProject, study, BioSample or run
+  outdir: ""                      # empty: <outdir>/raw. Point at an existing fetch to resume it
+  runs_file: ""                   # optional file of run accessions, one per line
+  expect_runs: null               # fail unless the accession resolves to exactly this many
+  sra_fallback: false
+
+qc:
+  run: true
+
+references:
+  metadata:                       # study metadata, one row per sample
+    path: /path/to/metadata.tsv   # or url: https://...
+    sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  # mock:                         # needed for the mock check and the resolution stage
+  #   url: https://...
+  #   sha256: "..."
+
+classifier:
+  name: gg2_2024.09_v4
+  path: /path/to/classifier.qza
+  sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+  confidence: 0.7
+
+primers:
+  forward: GTGCCAGCMGCCGCGGTAA      # 515F
+  reverse: GGACTACHVGGGTWTCTAAT     # 806R
+  discard_untrimmed: false
+
+quality:
+  min_q: 30
+  amplicon_len: 253
+  min_overlap: 12
+  margin: 20
+  n: 10000
+
+dada2:
+  allow_zero_read_samples: false
+
+mock:
+  samples: []                     # ids as they appear in the run-level DADA2 table
+
+resolution:
+  run: false
+  primers: []                     # e.g. "v4=GTGCCAGCMGCCGCGGTAA,GGACTACHVGGGTWTCTAAT"
+  full_length: true
+
+collapse:
+  group_column: sample_title
+  expect_samples: null
+  sanitize_ids: false
+
+filter:
+  include: Bacteria
+  exclude: mitochondria,chloroplast
+  drop_where: ""                  # SQLite WHERE selecting samples to drop
+  min_samples_fraction: 0
+  min_sample_reads: 0
+
+diversity:
+  depth: null                     # no depth is invented; set one, or set auto_depth
+  auto_depth: false
+  group_columns: []
+  iterations: 100
+
+analysis:
+  group: my_group_column
+  explains_terms: []              # two or more terms to fit together in ap_explains()
+  da_levels: []                   # e.g. [control, case]; empty keeps every level
+  da_reference: null
+  da_methods: []                  # empty: every method ap_da() supports
+  normalizations: [tss, css, clr, rarefy]
+  seed: 1
+  permutations: 999
+  n_resample: 100
+  alpha_rarefy_iterations: 100

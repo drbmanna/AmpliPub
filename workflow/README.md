@@ -3,6 +3,38 @@
 Staged scripts that run upstream of the AmpliPub R package, in WSL or Linux. They are
 not part of the package build.
 
+## Run everything
+
+One Snakemake command runs from raw reads to the report: download, QC, import, primers,
+quality, DADA2, the mock check, taxonomy, pooling runs into samples, filtering, the tree,
+diversity, the AmpliPub analysis and an HTML report. Each stage below is called unchanged.
+
+```bash
+bash workflow/setup_envs.sh
+cp workflow/config/config.template.yaml ~/my_study.yaml   # edit paths and checksums; keep it outside the repo
+mkdir -p ~/runs/my_study && cd ~/runs/my_study
+conda run -n amplipub-snakemake snakemake -s /path/to/AmpliPub/workflow/Snakefile \
+  --configfile ~/my_study.yaml --sdm conda --cores 12
+```
+
+- **Dry run first.** Add `-n` to print every job without running anything.
+- **Run from a working directory outside the repository.** Snakemake keeps its state in
+  `.snakemake/` in the directory it is run from.
+- **Every input the workflow did not produce is checked.** The metadata, the mock
+  reference and the classifier are verified against the sha256 in the config before any
+  stage uses them.
+- **Rerunning is safe.** Finished jobs are skipped. Pointing `fetch.outdir` at an earlier
+  download resumes it instead of fetching again.
+- **The config is validated before anything runs**, against `workflow/config/schema.yaml`.
+- **What a run leaves behind:** each stage's own outputs and log, a Snakemake log and
+  benchmark per job, `amplipub/tables/` and `amplipub/figures/`, `report/report.html`,
+  and `provenance/`. Provenance holds the git commit, every conda environment exported,
+  `sessionInfo()`, the resolved config and the sha256 of every analysis input.
+
+The R stages run in the `amplipub-r` environment, which pins R 4.5.3 and every package
+version (`envs/amplipub-r.yml`). `setup_envs.sh` installs AmpliPub into it from this
+checkout, so the package a run uses is the commit that holds the workflow.
+
 ## Setup
 
 ```bash

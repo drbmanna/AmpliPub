@@ -1,0 +1,150 @@
+---
+title: "AmpliPub analysis report"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    self_contained: true
+params:
+  results: ""
+  run_info: ""
+  provenance_dir: ""
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+res <- readRDS(params$results)
+out_dir <- dirname(params$results)
+# Figures are written into the HTML as base64 data by knitr::image_uri. Linking them with
+# include_graphics left relative paths that pandoc could not embed from the temporary knit
+# directory, and inside a loop the linked figures did not appear at all. Every figure chunk
+# is results = "asis".
+fig <- function(name) {
+  path <- file.path(out_dir, "figures", paste0(name, ".png"))
+  if (file.exists(path)) {
+    cat(sprintf('\n<p><img src="%s" alt="%s" style="max-width:100%%;"></p>\n',
+                knitr::image_uri(path), name))
+  } else {
+    cat("\nFigure `", name, "` was not drawn; see the analysis log.\n", sep = "")
+  }
+  invisible(NULL)
+}
+show <- function(obj) cat(paste(utils::capture.output(print(obj)), collapse = "\n"))
+tbl <- function(df, digits = 4) knitr::kable(df, digits = digits, row.names = FALSE)
+```
+
+This report reads the outputs of the `amplipub_analysis` workflow stage and computes nothing
+new. Every number here is also in `tables/`, and every figure in `figures/`.
+
+# Run
+
+```{r run-info}
+tbl(utils::read.delim(params$run_info, stringsAsFactors = FALSE))
+```
+
+```{r git, results = "asis"}
+commit <- file.path(params$provenance_dir, "git_commit.txt")
+if (file.exists(commit)) cat("Repository commit: `", readLines(commit, warn = FALSE)[1], "`\n\n", sep = "")
+status <- file.path(params$provenance_dir, "git_status.txt")
+if (file.exists(status) && length(readLines(status, warn = FALSE)) > 0L) {
+  cat("**The checkout had uncommitted changes when this ran.** See `provenance/git_status.txt`.\n")
+}
+```
+
+# Study design
+
+```{r scan, results = "asis"}
+cat("```\n"); show(res$scan); cat("\n```\n")
+```
+
+# Alpha diversity
+
+Computed on the rarefied table from `10_diversity` (depth `r res$depth`).
+
+```{r alpha-tests}
+tbl(res$alpha_test$results)
+```
+
+```{r alpha-fig, results = "asis"}
+fig("alpha")
+```
+
+# Beta diversity
+
+```{r permanova}
+tbl(merge(res$permanova$results, res$permanova$interpretation[, c("metric", "term", "verdict")],
+          by = c("metric", "term")))
+```
+
+```{r permanova-text, results = "asis"}
+for (i in seq_len(nrow(res$permanova$interpretation))) {
+  r <- res$permanova$interpretation[i, ]
+  cat("- **", r$metric, "**: ", r$interpretation, "\n", sep = "")
+}
+```
+
+```{r ordination-figs, results = "asis"}
+for (m in res$beta$metrics) {
+  cat("\n\n## ", m, "\n\n", sep = "")
+  fig(paste0("ordination_", m))
+  fig(paste0("dispersion_", m))
+}
+```
+
+# Composition
+
+```{r taxa-figs, results = "asis"}
+fig("taxa_phylum_bars")
+fig("taxa_genus_bars")
+fig("taxa_genus_heatmap")
+```
+
+# Differential abundance
+
+```{r da, results = "asis"}
+cat("```\n"); show(res$concordance); cat("\n```\n")
+```
+
+```{r da-figs, results = "asis"}
+fig("da_volcano")
+fig("da_concordance")
+fig("da_effects")
+```
+
+# Exploratory screen
+
+Hypothesis-generating. Ranked by variance explained adjusted for degrees of freedom, with one
+multiple-testing correction across every test run.
+
+```{r screen}
+tbl(utils::head(res$screen$results[, c("rank", "variable", "family", "metric", "effect_name",
+                                       "effect_adj", "p", "q", "stability", "verdict")], 30))
+```
+
+```{r screen-fig, results = "asis"}
+fig("screen")
+```
+
+```{r explains, results = "asis"}
+if (!is.null(res$explains)) {
+  cat("\n# Confirmatory model\n\n")
+  cat("```\n"); show(res$explains); cat("\n```\n")
+}
+```
+
+# Normalization sensitivity
+
+Whether each conclusion holds under every normalization compared.
+
+```{r normalization}
+tbl(res$normalization$results)
+tbl(res$normalization$agreement)
+```
+
+# Software
+
+```{r session, results = "asis"}
+cat("```\n", paste(readLines(file.path(out_dir, "provenance", "sessionInfo.txt")), collapse = "\n"), "\n```\n")
+envs <- list.files(params$provenance_dir, pattern = "^env_.*\\.yml$")
+if (length(envs)) cat("\nConda environment exports: ", paste0("`", envs, "`", collapse = ", "), "\n")
+```

@@ -1,0 +1,180 @@
+# Snakemake 9.26.1's utils.validate() always validates with jsonschema's Draft202012Validator
+# and warns ("No validator found ...") unless $schema names that exact dialect, so the schema
+# is written in and declares draft 2020-12.
+$schema: "https://json-schema.org/draft/2020-12/schema"
+description: >
+  Configuration for the AmpliPub end-to-end workflow. Every setting that changes a result
+  is written here, so a run is fully described by its config and the repository commit.
+type: object
+
+$defs:
+  checked_file:
+    type: object
+    description: A file the workflow did not produce. Give a url or a local path, and its sha256.
+    properties:
+      url: {type: string}
+      path: {type: string}
+      sha256: {type: string, pattern: "^[0-9a-fA-F]{64}$"}
+    required: [sha256]
+    anyOf:
+      - required: [url]
+      - required: [path]
+
+properties:
+  outdir:
+    type: string
+    description: Results directory for this run.
+
+  envs:
+    type: object
+    properties:
+      qiime2: {type: string, default: "qiime2-amplicon-2025.7"}
+      qc: {type: string, default: "amplipub-qc"}
+      r: {type: string, default: "amplipub-r"}
+    required: [qiime2, qc, r]
+
+  threads:
+    type: object
+    properties:
+      fetch: {type: integer, minimum: 1, default: 4}
+      qc: {type: integer, minimum: 1, default: 4}
+      primers: {type: integer, minimum: 1, default: 4}
+      dada2: {type: integer, minimum: 1, default: 4}
+      taxonomy: {type: integer, minimum: 1, default: 4}
+      tree: {type: integer, minimum: 1, default: 4}
+      diversity: {type: integer, minimum: 1, default: 4}
+      r: {type: integer, minimum: 1, default: 4}
+    required: [fetch, qc, primers, dada2, taxonomy, tree, diversity, r]
+
+  fetch:
+    type: object
+    properties:
+      accession: {type: string}
+      outdir:
+        type: string
+        default: ""
+        description: Where reads are fetched. Empty means <outdir>/raw. Point at an existing fetch to resume it.
+      runs_file: {type: string, default: ""}
+      expect_runs: {type: ["integer", "null"], default: null}
+      sra_fallback: {type: boolean, default: false}
+    required: [accession, outdir, runs_file, expect_runs, sra_fallback]
+
+  qc:
+    type: object
+    properties:
+      run: {type: boolean, default: true}
+    required: [run]
+
+  references:
+    type: object
+    properties:
+      metadata: {$ref: "#/$defs/checked_file"}
+      mock: {$ref: "#/$defs/checked_file"}
+    required: [metadata]
+
+  classifier:
+    type: object
+    properties:
+      name: {type: string, pattern: "^[A-Za-z0-9_.-]+$"}
+      path: {type: string}
+      sha256: {type: string, pattern: "^[0-9a-fA-F]{64}$"}
+      confidence: {type: number, minimum: 0, maximum: 1, default: 0.7}
+    required: [name, path, sha256, confidence]
+
+  primers:
+    type: object
+    properties:
+      forward: {type: string, default: "GTGCCAGCMGCCGCGGTAA"}
+      reverse: {type: string, default: "GGACTACHVGGGTWTCTAAT"}
+      discard_untrimmed: {type: boolean, default: false}
+    required: [forward, reverse, discard_untrimmed]
+
+  quality:
+    type: object
+    properties:
+      min_q: {type: number, default: 30}
+      amplicon_len: {type: integer, default: 253}
+      min_overlap: {type: integer, default: 12}
+      margin: {type: integer, default: 20}
+      n: {type: integer, default: 10000}
+    required: [min_q, amplicon_len, min_overlap, margin, n]
+
+  dada2:
+    type: object
+    properties:
+      allow_zero_read_samples: {type: boolean, default: false}
+    required: [allow_zero_read_samples]
+
+  mock:
+    type: object
+    properties:
+      samples:
+        type: array
+        items: {type: string}
+        default: []
+        description: Mock community ids as they appear in the run-level DADA2 table.
+    required: [samples]
+
+  resolution:
+    type: object
+    properties:
+      run: {type: boolean, default: false}
+      primers:
+        type: array
+        items: {type: string, pattern: "^[A-Za-z0-9_]+=[A-Za-z]+,[A-Za-z]+$"}
+        default: []
+      full_length: {type: boolean, default: true}
+    required: [run, primers, full_length]
+
+  collapse:
+    type: object
+    properties:
+      group_column: {type: string, default: "sample_title"}
+      expect_samples: {type: ["integer", "null"], default: null}
+      sanitize_ids: {type: boolean, default: false}
+    required: [group_column, expect_samples, sanitize_ids]
+
+  filter:
+    type: object
+    properties:
+      include: {type: string, default: "Bacteria"}
+      exclude: {type: string, default: "mitochondria,chloroplast"}
+      drop_where: {type: string, default: ""}
+      min_samples_fraction: {type: number, minimum: 0, maximum: 1, default: 0}
+      min_sample_reads: {type: integer, minimum: 0, default: 0}
+    required: [include, exclude, drop_where, min_samples_fraction, min_sample_reads]
+
+  diversity:
+    type: object
+    properties:
+      depth: {type: ["integer", "null"], minimum: 1, default: null}
+      auto_depth: {type: boolean, default: false}
+      group_columns: {type: array, items: {type: string}, default: []}
+      iterations: {type: integer, minimum: 1, default: 100}
+    required: [depth, auto_depth, group_columns, iterations]
+
+  analysis:
+    type: object
+    properties:
+      group: {type: string, description: Primary metadata variable for alpha, beta and DA.}
+      explains_terms: {type: array, items: {type: string}, default: []}
+      da_levels:
+        type: array
+        items: {type: string}
+        default: []
+        description: Keep only these levels of group for differential abundance. Empty keeps all.
+      da_reference: {type: ["string", "null"], default: null}
+      da_methods: {type: array, items: {type: string}, default: []}
+      normalizations:
+        type: array
+        items: {type: string, enum: ["tss", "css", "clr", "rarefy"]}
+        default: ["tss", "css", "clr", "rarefy"]
+      seed: {type: integer, default: 1}
+      permutations: {type: integer, minimum: 1, default: 999}
+      n_resample: {type: integer, minimum: 10, default: 100}
+      alpha_rarefy_iterations: {type: integer, minimum: 1, default: 100}
+    required: [group, explains_terms, da_levels, da_reference, da_methods, normalizations,
+               seed, permutations, n_resample, alpha_rarefy_iterations]
+
+required: [outdir, envs, threads, fetch, qc, references, classifier, primers, quality, dada2,
+           mock, resolution, collapse, filter, diversity, analysis]
