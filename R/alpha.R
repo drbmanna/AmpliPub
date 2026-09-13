@@ -16,6 +16,13 @@
 #' Computes Hill numbers at q = 0, 1 and 2, Pielou's evenness, and Faith's
 #' phylogenetic diversity when a tree is attached.
 #'
+#' Every value comes from an established package: richness from
+#' `vegan::specnumber`, Hill q1 and q2 from `vegan::renyi(hill = TRUE)`, Shannon
+#' entropy and evenness from `vegan::diversity`, Faith's PD from
+#' `mia::addAlpha(index = "faith_diversity")`, Chao1 and ACE from
+#' `vegan::estimateR`, and rarefaction from `vegan::rrarefy`. AmpliPub adds the
+#' guards, the averaging over rarefaction iterations, and the reporting.
+#'
 #' @section Rarefaction:
 #' Richness rises with sequencing depth, so q = 0 is not comparable across
 #' samples of different depth. Rarefaction is applied by default, repeated
@@ -96,7 +103,7 @@ ap_alpha <- function(x,
     ))
     metrics <- setdiff(metrics, "faith_pd")
   }
-  pd_index <- if ("faith_pd" %in% metrics) ap_pd_index(tree, rownames(counts)) else NULL
+  if (!"faith_pd" %in% metrics) tree <- NULL
 
   depths <- colSums(counts)
   dropped <- character(0)
@@ -127,7 +134,7 @@ ap_alpha <- function(x,
       ))
       counts <- counts[, setdiff(colnames(counts), dropped), drop = FALSE]
     }
-    values <- ap_alpha_rarefied(counts, metrics, depth, n_iter, seed, pd_index)
+    values <- ap_alpha_rarefied(counts, metrics, depth, n_iter, seed, tree)
   } else {
     if (length(unique(depths)) > 1L) {
       ap_warn(paste0(
@@ -137,7 +144,7 @@ ap_alpha <- function(x,
       ))
     }
     n_iter <- 1L
-    values <- ap_alpha_one(counts, metrics, pd_index)
+    values <- ap_alpha_one(counts, metrics, tree)
   }
 
   structure(
@@ -154,12 +161,12 @@ ap_alpha <- function(x,
 }
 
 #' @keywords internal
-ap_alpha_rarefied <- function(counts, metrics, depth, n_iter, seed, pd_index) {
+ap_alpha_rarefied <- function(counts, metrics, depth, n_iter, seed, tree) {
   set.seed(seed)
   acc <- NULL
   for (i in seq_len(n_iter)) {
     sub <- ap_rarefy_matrix(counts, depth)
-    one <- ap_alpha_one(sub, metrics, pd_index)
+    one <- ap_alpha_one(sub, metrics, tree)
     acc <- if (is.null(acc)) one else {
       acc$value <- acc$value + one$value
       acc
@@ -169,43 +176,45 @@ ap_alpha_rarefied <- function(counts, metrics, depth, n_iter, seed, pd_index) {
   acc
 }
 
-# Subsample each column to `depth` reads without replacement. Equivalent to
-# drawing `depth` of the sample's reads at random, which is what rarefaction
-# means; sampling with replacement would be a bootstrap and inflates richness.
+# Rarefaction by vegan::rrarefy: each sample drawn down to `depth` reads without
+# replacement. vegan takes samples in rows, so the table is transposed in and
+# back out.
+#
+# rrarefy warns whenever a table's smallest count is not 1, because missing
+# singletons can mean the counts were multiplied. Denoised amplicon tables have
+# no singletons by design, so on DADA2 or Deblur output that warning would fire
+# on every one of the rarefaction iterations. It alone is silenced.
 #' @keywords internal
 ap_rarefy_matrix <- function(counts, depth) {
-  out <- counts
-  for (j in seq_len(ncol(counts))) {
-    v <- counts[, j]
-    nz <- which(v > 0)
-    drawn <- tabulate(
-      sample(rep.int(nz, times = v[nz]), size = depth, replace = FALSE),
-      nbins = nrow(counts)
-    )
-    out[, j] <- drawn
-  }
+  out <- ap_muffle_warning(t(vegan::rrarefy(t(counts), depth)),
+                           "function should be used for observed counts")
+  dimnames(out) <- dimnames(counts)
   out
 }
 
 #' @keywords internal
-ap_alpha_one <- function(counts, metrics, pd_index) {
+ap_alpha_one <- function(counts, metrics, tree = NULL) {
   res <- list()
-  p <- sweep(counts, 2, colSums(counts), "/")
+  sites <- t(counts)  # vegan takes samples in rows
 
-  if ("q0" %in% metrics) res$q0 <- colSums(counts > 0)
-  if (any(c("q1", "evenness", "shannon_entropy") %in% metrics)) {
-    ent <- ap_shannon_entropy_matrix(p)
+  # Richness as an integer count. vegan::renyi gives it as exp(log S), which
+  # is off by rounding error and would break exact comparisons.
+  richness <- vegan::specnumber(sites)
+  if ("q0" %in% metrics) res$q0 <- richness
+  if (any(c("q1", "q2") %in% metrics)) {
+    hill <- vegan::renyi(sites, scales = c(1, 2), hill = TRUE)
+    # renyi returns a data frame for several samples and a vector for one.
+    hill <- matrix(unlist(hill), nrow = nrow(sites), dimnames = list(rownames(sites), c("1", "2")))
+    if ("q1" %in% metrics) res$q1 <- hill[, "1"]
+    if ("q2" %in% metrics) res$q2 <- hill[, "2"]
   }
-  if ("q1" %in% metrics) res$q1 <- exp(ent)
-  if ("shannon_entropy" %in% metrics) res$shannon_entropy <- ent / log(2)
-  if ("q2" %in% metrics) res$q2 <- 1 / colSums(p^2)
+  if ("shannon_entropy" %in% metrics) res$shannon_entropy <- vegan::diversity(sites, base = 2)
   if ("evenness" %in% metrics) {
-    rich <- colSums(counts > 0)
-    ev <- ent / log(rich)
-    ev[rich <= 1L] <- NA_real_
+    ev <- vegan::diversity(sites) / log(richness)
+    ev[richness <= 1L] <- NA_real_
     res$evenness <- ev
   }
-  if ("faith_pd" %in% metrics) res$faith_pd <- ap_faith_pd(counts, pd_index)
+  if ("faith_pd" %in% metrics) res$faith_pd <- ap_faith_pd_mia(counts, tree)
   if (any(c("chao1", "ace") %in% metrics)) {
     # vegan::estimateR takes sites in rows, so the table is transposed. It returns
     # one column per sample. Where ACE is undefined (every rare read a singleton)
@@ -269,14 +278,6 @@ ap_check_richness_estimators <- function(counts, force) {
   invisible("ok")
 }
 
-# Natural log. 0 log 0 is 0, not NaN.
-#' @keywords internal
-ap_shannon_entropy_matrix <- function(p) {
-  lp <- log(p)
-  lp[!is.finite(lp)] <- 0
-  -colSums(p * lp)
-}
-
 #' Shannon entropy, stated in a named base
 #'
 #' Shannon entropy is base-dependent and the base is a convention nobody
@@ -287,14 +288,16 @@ ap_shannon_entropy_matrix <- function(p) {
 #' Prefer the Hill number `q1`, which is `exp(H)` in nats and is base-free:
 #' effective number of equally abundant species.
 #'
+#' Computed by `vegan::diversity(index = "shannon", base = base)`. This function
+#' exists to make the base explicit and to take samples in columns.
+#'
 #' @param counts Numeric vector or matrix of counts, samples in columns.
 #' @param base Logarithm base. Default `2`, matching QIIME 2.
 #' @return Numeric vector of entropies.
 #' @export
 ap_shannon_entropy <- function(counts, base = 2) {
   m <- if (is.matrix(counts)) counts else matrix(counts, ncol = 1L)
-  p <- sweep(m, 2, colSums(m), "/")
-  ap_shannon_entropy_matrix(p) / log(base)
+  vegan::diversity(t(m), index = "shannon", base = base)
 }
 
 #' Good's coverage, with a refusal for denoised data

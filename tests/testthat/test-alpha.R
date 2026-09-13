@@ -212,66 +212,71 @@ test_that("depth candidates report the trade between samples kept and reads used
   expect_true(all(diff(cand$samples_retained) <= 0))
 })
 
-# --- Faith's PD implementation ---
+# --- Faith's PD (computed by mia; these check the wiring and the guards) ---
 
 test_that("PD on a hand-drawn tree equals the branch lengths summed by hand", {
   tr <- ape::read.tree(text = "((A:1,B:2):3,C:4);")
   ids <- c("A", "B", "C")
-  idx <- ap_pd_index(tr, ids)
 
   # A alone: its own branch plus the internal branch to the root, 1 + 3 = 4.
   m <- matrix(c(1, 0, 0), ncol = 1, dimnames = list(ids, "s"))
-  expect_equal(unname(ap_faith_pd(m, idx)), 4)
+  expect_equal(unname(ap_faith_pd_mia(m, tr)), 4)
 
   # A and B: 1 + 2 + 3 = 6.
   m <- matrix(c(1, 1, 0), ncol = 1, dimnames = list(ids, "s"))
-  expect_equal(unname(ap_faith_pd(m, idx)), 6)
+  expect_equal(unname(ap_faith_pd_mia(m, tr)), 6)
 
   # Everything: the whole tree, 1 + 2 + 3 + 4 = 10.
   m <- matrix(c(1, 1, 1), ncol = 1, dimnames = list(ids, "s"))
-  expect_equal(unname(ap_faith_pd(m, idx)), 10)
-  expect_equal(unname(ap_faith_pd(m, idx)), idx$total)
+  expect_equal(unname(ap_faith_pd_mia(m, tr)), 10)
 })
 
 test_that("PD counts a shared branch once, not once per descendant", {
   tr <- ape::read.tree(text = "((A:1,B:1):10,C:1);")
-  idx <- ap_pd_index(tr, c("A", "B", "C"))
   m <- matrix(c(1, 1, 0), ncol = 1, dimnames = list(c("A", "B", "C"), "s"))
   # 1 + 1 + 10, not 1 + 10 + 1 + 10.
-  expect_equal(unname(ap_faith_pd(m, idx)), 12)
+  expect_equal(unname(ap_faith_pd_mia(m, tr)), 12)
 })
 
 test_that("PD ignores abundance and responds only to presence", {
   tr <- ape::read.tree(text = "((A:1,B:2):3,C:4);")
-  idx <- ap_pd_index(tr, c("A", "B", "C"))
   a <- matrix(c(1, 5, 0), ncol = 1, dimnames = list(c("A", "B", "C"), "s"))
   b <- matrix(c(900, 7, 0), ncol = 1, dimnames = list(c("A", "B", "C"), "s"))
-  expect_equal(ap_faith_pd(a, idx), ap_faith_pd(b, idx))
+  expect_equal(ap_faith_pd_mia(a, tr), ap_faith_pd_mia(b, tr))
+})
+
+test_that("a tree rerooted with ape::root() gives correct PD instead of crashing R", {
+  # mia 1.16.1 crashed the R session on exactly this tree (found 2026-09-13).
+  # If the guard stops working, this test takes the test run down with it,
+  # which is the loud failure we want. The reference is the obviously correct
+  # method: prune the tree to each sample's features with ape and sum the edges.
+  counts <- ap_fixture_counts()
+  tr <- ap_fixture_tree(counts)
+  expect_true(ape::is.rooted(tr))
+
+  pd <- ap_faith_pd_mia(counts, tr)
+  ref <- vapply(seq_len(ncol(counts)), function(j) {
+    present <- rownames(counts)[counts[, j] > 0]
+    if (length(present) == length(tr$tip.label)) return(sum(tr$edge.length))
+    sum(ape::keep.tip(tr, present)$edge.length)
+  }, numeric(1))
+  expect_equal(unname(pd), ref, tolerance = 1e-10)
 })
 
 test_that("a tree without branch lengths is refused for PD", {
   tr <- ape::read.tree(text = "((A,B),C);")
-  expect_error(ap_pd_index(tr, c("A", "B", "C")), "no branch lengths")
+  m <- matrix(c(1, 1, 0), ncol = 1, dimnames = list(c("A", "B", "C"), "s"))
+  expect_error(ap_faith_pd_mia(m, tr), "no branch lengths")
 })
 
-test_that("the fast PD index agrees with pruning the tree per sample", {
-  # The slow, obviously correct implementation, on a tree big enough that an
-  # indexing mistake would show.
-  set.seed(5)
-  tr <- ape::rtree(40)
-  ids <- tr$tip.label
-  idx <- ap_pd_index(tr, ids)
-
-  counts <- matrix(stats::rbinom(40 * 6, 1, 0.4), nrow = 40,
-                   dimnames = list(ids, paste0("s", 1:6)))
-  counts[1, ] <- 1  # every sample keeps at least one tip
-
-  slow <- vapply(seq_len(ncol(counts)), function(j) {
-    present <- ids[counts[, j] > 0]
-    if (length(present) == length(ids)) return(sum(tr$edge.length))
-    pruned <- ape::keep.tip(tr, present)
-    sum(pruned$edge.length)
-  }, numeric(1))
-
-  expect_equal(unname(ap_faith_pd(counts, idx)), slow, tolerance = 1e-10)
+test_that("each sample gets its own PD, in the right order, through ap_alpha", {
+  # Sample order is the part AmpliPub controls, so it is what can go wrong.
+  tr <- ape::read.tree(text = "((A:1,B:2):3,C:4);")
+  m <- matrix(c(5, 3, 0,
+                0, 0, 9), ncol = 2,
+              dimnames = list(c("A", "B", "C"), c("s1", "s2")))
+  x <- ap_import(m, data.frame(g = c("a", "b"), row.names = c("s1", "s2")), tree = tr)
+  expect_equal(ap_faith_pd_raw(x), c(s1 = 6, s2 = 4))
+  a <- suppressWarnings(ap_alpha(x, metrics = "faith_pd", rarefy = FALSE))
+  expect_equal(a$values$value[match(c("s1", "s2"), a$values$sample_id)], c(6, 4))
 })

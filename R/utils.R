@@ -21,6 +21,16 @@ ap_warn <- function(message, ..., .envir = parent.frame()) {
   cli::cli_warn(message, ..., .envir = .envir)
 }
 
+# Some package calls emit a warning that is known and expected on amplicon data
+# every time they run. A warning that always fires teaches people to ignore
+# warnings, so exactly that message is silenced and every other one still shows.
+#' @keywords internal
+ap_muffle_warning <- function(expr, pattern) {
+  withCallingHandlers(expr, warning = function(w) {
+    if (grepl(pattern, conditionMessage(w), fixed = TRUE)) invokeRestart("muffleWarning")
+  })
+}
+
 # metadata.yaml and VERSION inside a QIIME 2 artifact are flat `key: value`
 # documents, four keys at most, no nesting and no lists. A full YAML parser is a
 # dependency we do not need for that. Anything nested is rejected rather than

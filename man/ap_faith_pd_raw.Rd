@@ -14,7 +14,8 @@ A named numeric vector, one value per sample.
 }
 \description{
 Total branch length of the minimal subtree connecting each sample's observed
-features to the root of the phylogeny.
+features to the root of the phylogeny, computed by
+\code{mia::addAlpha(index = "faith_diversity")}.
 }
 \details{
 Usually called through \code{\link[=ap_alpha]{ap_alpha()}}, which rarefies first. PD rises with the

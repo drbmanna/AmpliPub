@@ -41,6 +41,14 @@ one row per sample per metric), \code{depth}, \code{n_iter}, \code{seed} and \co
 Computes Hill numbers at q = 0, 1 and 2, Pielou's evenness, and Faith's
 phylogenetic diversity when a tree is attached.
 }
+\details{
+Every value comes from an established package: richness from
+\code{vegan::specnumber}, Hill q1 and q2 from \code{vegan::renyi(hill = TRUE)}, Shannon
+entropy and evenness from \code{vegan::diversity}, Faith's PD from
+\code{mia::addAlpha(index = "faith_diversity")}, Chao1 and ACE from
+\code{vegan::estimateR}, and rarefaction from \code{vegan::rrarefy}. AmpliPub adds the
+guards, the averaging over rarefaction iterations, and the reporting.
+}
 \section{Rarefaction}{
 
 Richness rises with sequencing depth, so q = 0 is not comparable across

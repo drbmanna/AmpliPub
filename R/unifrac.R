@@ -14,6 +14,50 @@
 # checked against QIIME's own output in test-crosscheck-qiime.R.
 
 #' @keywords internal
+ap_pd_index <- function(tree, feature_ids) {
+  ap_assert(inherits(tree, "phylo"), "`tree` must be an `ape::phylo`.")
+  ap_check_tree_covers(tree, feature_ids)
+  ap_assert(!is.null(tree$edge.length),
+            paste0("The tree has no branch lengths, so Faith's PD and UniFrac are ",
+                   "undefined on it. A cladogram cannot give phylogenetic diversity."))
+  ap_assert(all(tree$edge.length >= 0),
+            "The tree has {sum(tree$edge.length < 0)} negative branch length{?s}.")
+
+  n_tip <- length(tree$tip.label)
+  parent <- tree$edge[, 1]
+  child <- tree$edge[, 2]
+  edge_of_child <- integer(max(tree$edge))
+  edge_of_child[child] <- seq_along(child)
+  parent_of <- integer(max(tree$edge))
+  parent_of[child] <- parent
+
+  i <- integer(0)
+  j <- integer(0)
+  for (t in seq_len(n_tip)) {
+    node <- t
+    repeat {
+      e <- edge_of_child[node]
+      if (e == 0L) break
+      i <- c(i, t)
+      j <- c(j, e)
+      node <- parent_of[node]
+    }
+  }
+
+  incidence <- Matrix::sparseMatrix(
+    i = i, j = j, x = 1,
+    dims = c(n_tip, length(child)),
+    dimnames = list(tree$tip.label, NULL)
+  )
+
+  list(
+    incidence = incidence[feature_ids, , drop = FALSE],
+    edge_length = tree$edge.length,
+    total = sum(tree$edge.length)
+  )
+}
+
+#' @keywords internal
 ap_edge_presence <- function(counts, pd_index) {
   # Edges x samples, 1 where at least one observed tip descends from the edge.
   presence <- Matrix::Matrix((counts > 0) * 1, sparse = TRUE)

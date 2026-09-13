@@ -23,4 +23,7 @@ and 3.64. Neither is wrong and they are not comparable.
 \details{
 Prefer the Hill number \code{q1}, which is \code{exp(H)} in nats and is base-free:
 effective number of equally abundant species.
+
+Computed by \code{vegan::diversity(index = "shannon", base = base)}. This function
+exists to make the base explicit and to take samples in columns.
 }
