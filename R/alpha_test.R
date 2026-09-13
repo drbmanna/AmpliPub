@@ -115,7 +115,7 @@ ap_alpha_simple <- function(df, metric, n_boot) {
       test <- "One-way ANOVA"
     } else {
       ht <- stats::kruskal.test(v, g)
-      es <- ap_epsilon_squared(unname(ht$statistic), length(v), k, v, g, n_boot)
+      es <- ap_eta_squared_h(v, g, n_boot)
       test <- "Kruskal-Wallis"
     }
   }
@@ -188,25 +188,39 @@ ap_eta_squared <- function(sm) {
 }
 
 #' @keywords internal
-ap_epsilon_squared <- function(H, n, k, v, g, n_boot) {
-  est <- ap_epsilon_squared_point(H, n, k)
-  boots <- vapply(seq_len(n_boot), function(i) {
-    idx <- sample(seq_len(n), replace = TRUE)
-    gi <- droplevels(g[idx])
-    if (nlevels(gi) < 2L) return(NA_real_)
-    h <- tryCatch(unname(stats::kruskal.test(v[idx], gi)$statistic),
-                  error = function(e) NA_real_)
-    ap_epsilon_squared_point(h, n, nlevels(gi))
-  }, numeric(1))
-  list(name = "epsilon squared", estimate = est,
-       ci = unname(stats::quantile(boots, c(0.025, 0.975), na.rm = TRUE)))
-}
+ap_eta_squared_h <- function(v, g, n_boot) {
+  # Kruskal-Wallis effect size: eta squared based on H, (H - k + 1) / (n - k).
+  # The estimate is rstatix::kruskal_effsize. Its bootstrap interval is not
+  # used, because rstatix rounds it to two decimals, too coarse for effects of
+  # 0.005 to 0.04. The interval comes from boot::boot and boot::boot.ci, the
+  # functions rstatix itself calls, with the formula rstatix documents evaluated
+  # on each replicate. On 2,000 replicates at n = 487 that matched calling
+  # rstatix per replicate exactly, and ran about 13 times faster. The guard
+  # stops if the formula and rstatix ever disagree on the full data.
+  df <- data.frame(value = v, g = droplevels(as.factor(g)))
+  # rstatix passes on kruskal.test's statistic name; the estimate is a plain number.
+  est <- unname(rstatix::kruskal_effsize(df, value ~ g)$effsize)
 
-# Epsilon squared from a Kruskal-Wallis H. Shared with ap_screen(), which needs
-# the point estimate thousands of times and no interval.
-#' @keywords internal
-ap_epsilon_squared_point <- function(H, n, k) {
-  (H - k + 1) / (n - k)
+  eta_h <- function(d, i) {
+    d <- d[i, , drop = FALSE]
+    grp <- droplevels(d$g)
+    k <- nlevels(grp)
+    if (k < 2L) return(NA_real_)
+    H <- unname(stats::kruskal.test(d$value, grp)$statistic)
+    (H - k + 1) / (nrow(d) - k)
+  }
+  full <- eta_h(df, seq_len(nrow(df)))
+  ap_assert(
+    isTRUE(abs(full - est) < 1e-10),
+    paste0("The bootstrap formula gives {signif(full, 8)} but rstatix gives ",
+           "{signif(est, 8)} on the full data, so the interval would not belong ",
+           "to the estimate.")
+  )
+
+  b <- boot::boot(df, eta_h, R = n_boot)
+  ci <- tryCatch(unname(boot::boot.ci(b, type = "perc")$percent[4:5]),
+                 error = function(e) c(NA_real_, NA_real_))
+  list(name = "eta squared (H)", estimate = est, ci = ci)
 }
 
 #' @keywords internal

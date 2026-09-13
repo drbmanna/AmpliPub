@@ -17,7 +17,7 @@ ap_plot_screen <- function(screen, n = 20L) {
   r$label <- paste0(r$variable, " | ", r$metric)
   r$label <- factor(r$label, levels = rev(unique(r$label)))
   r$family_label <- ifelse(r$family == "alpha",
-                           "Alpha (epsilon2 or rho2)", "Beta (PERMANOVA R2)")
+                           "Alpha (eta2[H] or rho2)", "Beta (PERMANOVA R2)")
   r$stability_label <- sprintf("%.0f%%", 100 * r$stability)
 
   ggplot2::ggplot(r, ggplot2::aes(x = .data$effect_adj, y = .data$label,

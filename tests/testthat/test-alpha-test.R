@@ -102,6 +102,27 @@ test_that("three groups route to a three-group test", {
   expect_true(res$test %in% c("One-way ANOVA", "Kruskal-Wallis"))
 })
 
+test_that("the Kruskal-Wallis effect is rstatix's eta squared (H), with an unrounded interval", {
+  set.seed(14)
+  n <- 90L
+  meta <- data.frame(g = rep(c("a", "b", "c"), each = n / 3),
+                     row.names = sprintf("S%02d", seq_len(n)), stringsAsFactors = FALSE)
+  # Skewed values fail the normality check, which routes to the rank-based test.
+  values <- stats::rexp(n, 0.1) + rep(c(0, 4, 8), each = n / 3)
+  res <- ap_alpha_test(ap_fixture_alpha(values, meta), "g", n_boot = 300L)$results
+
+  expect_equal(res$test, "Kruskal-Wallis")
+  expect_equal(res$effect, "eta squared (H)")
+  ref <- rstatix::kruskal_effsize(data.frame(value = values, g = factor(meta$g)),
+                                  value ~ g)$effsize
+  expect_equal(res$estimate, unname(ref))
+  # rstatix's own interval is rounded to 0.01. This one comes from boot and
+  # must not be.
+  expect_false(isTRUE(all.equal(res$ci_low * 100, round(res$ci_low * 100))))
+  expect_lte(res$ci_low, res$estimate)
+  expect_gte(res$ci_high, res$estimate)
+})
+
 test_that("a covariate that explains the difference removes it", {
   # The group difference is entirely driven by the covariate, so adjusting for
   # the covariate must leave nothing behind.

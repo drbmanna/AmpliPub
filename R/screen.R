@@ -26,12 +26,13 @@
 #' samples, outranks a real two-group effect on the raw scale. Beta rows are
 #' therefore ranked on adjusted PERMANOVA R2, `1 - (1 - R2)(n - 1)/(n - df - 1)`,
 #' and numeric alpha rows on the same adjustment of Spearman rho squared.
-#' Categorical alpha rows use epsilon squared (Kruskal-Wallis), which already
+#' Categorical alpha rows use eta squared based on the Kruskal-Wallis H,
+#' `(H - k + 1) / (n - k)`, from `rstatix::kruskal_effsize`, which already
 #' subtracts the null expectation of H. Raw values stay in `effect`, adjusted
 #' ones in `effect_adj`.
 #'
 #' These are all proportions of variance, but not of the same variance: R2
-#' partitions distance sums of squares and epsilon squared partitions rank
+#' partitions distance sums of squares and eta squared (H) partitions rank
 #' variance. Order within a family is exact; order across families is
 #' approximate.
 #'
@@ -309,7 +310,7 @@ ap_screen_alpha_effect <- function(y, g, type) {
   n <- length(y)
   categorical <- type == "categorical"
   out <- list(test = if (categorical) "Kruskal-Wallis" else "Spearman",
-              effect_name = if (categorical) "epsilon squared" else "rho squared",
+              effect_name = if (categorical) "eta squared (H)" else "rho squared",
               n = n, df = NA_real_, statistic = NA_real_, effect = NA_real_,
               effect_adj = NA_real_, p = NA_real_)
 
@@ -320,9 +321,9 @@ ap_screen_alpha_effect <- function(y, g, type) {
     ht <- tryCatch(stats::kruskal.test(y, g), error = function(e) NULL)
     if (is.null(ht)) return(out)
     out$statistic <- unname(ht$statistic)
-    out$effect <- ap_epsilon_squared_point(out$statistic, n, k)
+    out$effect <- rstatix::kruskal_effsize(data.frame(value = y, g = g), value ~ g)$effsize
     out$df <- k - 1
-    # Epsilon squared already subtracts the null expectation of H, which is
+    # Eta squared (H) already subtracts the null expectation of H, which is
     # k - 1, so it needs no further adjustment.
     out$effect_adj <- out$effect
     out$p <- ht$p.value
@@ -436,7 +437,7 @@ ap_screen_stability <- function(specs, mats, n_resample, fraction, top_k, seed) 
 
 #' @keywords internal
 ap_effect_abbrev <- function(name) {
-  unname(c("R2" = "R2", "epsilon squared" = "eps2", "rho squared" = "rho2")[name])
+  unname(c("R2" = "R2", "eta squared (H)" = "eta2H", "rho squared" = "rho2")[name])
 }
 
 #' @export
@@ -507,7 +508,7 @@ print.ap_screen <- function(x, n = 20L, ...) {
     "small-n variables. The ranking uses the adjusted values; raw ones are shown for reference."
   ))
   cli::cli_alert_info(paste0(
-    "R2 partitions distance sums of squares and eps2 or rho2 partition rank variance. ",
+    "R2 partitions distance sums of squares and eta2H or rho2 partition rank variance. ",
     "Both are variance explained, not the same variance, so order across families is approximate."
   ))
   cli::cli_alert_info(paste0(
