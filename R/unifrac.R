@@ -1,31 +1,29 @@
-# UniFrac.
+# Unweighted UniFrac.
 #
-# Built on the same tip-by-edge incidence matrix as Faith's PD (see faith_pd.R).
-# Once each sample is expressed as a vector over tree edges, both UniFrac
-# variants are matrix algebra rather than per-pair tree traversal.
+# This is a documented exception to AmpliPub's rule of taking statistics from
+# established packages. The only installed package option, rbiom 2.2.1 through
+# mia::getDissimilarity, gives a different unweighted answer from scikit-bio
+# 0.6.2 (QIIME 2's engine) whenever a pair of samples does not span the root of
+# the tree: on four such toy pairs rbiom returned 1/2, 1, 1 and 1/3 where
+# scikit-bio and phyloseq return 1/3, 2/3, 1/2 and 1/4. phyloseq agrees with
+# scikit-bio on those pairs but differs from QIIME by up to 0.165 on the real
+# Baxter table. Weighted UniFrac is taken from rbiom, which agreed everywhere.
 #
-# Unweighted UniFrac is the fraction of branch length unique to one of two
-# samples: (union - shared) / union. Written as matrix products, `shared` for
-# every pair at once is a single crossprod.
-#
-# Weighted UniFrac sums branch lengths scaled by the difference in the relative
-# abundance descending from each branch. Which of the two published forms QIIME
-# 2 reports, raw or normalised, is not assumed here: both are computed and
-# checked against QIIME's own output in test-crosscheck-qiime.R.
+# The code below is the tip-by-edge incidence formulation: each sample becomes a
+# vector over tree edges, and unweighted UniFrac is (union - shared) / union of
+# the branch length observed in either sample. It is pinned by the scikit-bio
+# reference values in test-beta.R and by QIIME 2 output on 487 real samples in
+# test-crosscheck-qiime.R.
 
 #' @keywords internal
 ap_pd_index <- function(tree, feature_ids) {
-  ap_assert(inherits(tree, "phylo"), "`tree` must be an `ape::phylo`.")
-  ap_check_tree_covers(tree, feature_ids)
-  ap_assert(!is.null(tree$edge.length),
-            paste0("The tree has no branch lengths, so Faith's PD and UniFrac are ",
-                   "undefined on it. A cladogram cannot give phylogenetic diversity."))
-  ap_assert(all(tree$edge.length >= 0),
-            "The tree has {sum(tree$edge.length < 0)} negative branch length{?s}.")
+  ap_check_phylo(tree, feature_ids)
 
   n_tip <- length(tree$tip.label)
   parent <- tree$edge[, 1]
   child <- tree$edge[, 2]
+  # Edge index by child node: every node except the root is the child of
+  # exactly one edge, so this is a complete lookup for walking rootward.
   edge_of_child <- integer(max(tree$edge))
   edge_of_child[child] <- seq_along(child)
   parent_of <- integer(max(tree$edge))
@@ -37,7 +35,7 @@ ap_pd_index <- function(tree, feature_ids) {
     node <- t
     repeat {
       e <- edge_of_child[node]
-      if (e == 0L) break
+      if (e == 0L) break          # reached the root
       i <- c(i, t)
       j <- c(j, e)
       node <- parent_of[node]
@@ -66,14 +64,6 @@ ap_edge_presence <- function(counts, pd_index) {
 }
 
 #' @keywords internal
-ap_edge_abundance <- function(counts, pd_index) {
-  # Edges x samples, holding the relative abundance descending from each edge.
-  rel <- sweep(counts, 2, colSums(counts), "/")
-  as.matrix(Matrix::t(Matrix::crossprod(Matrix::Matrix(rel, sparse = TRUE),
-                                        pd_index$incidence)))
-}
-
-#' @keywords internal
 ap_unweighted_unifrac <- function(counts, pd_index) {
   E <- ap_edge_presence(counts, pd_index)
   b <- pd_index$edge_length
@@ -84,32 +74,6 @@ ap_unweighted_unifrac <- function(counts, pd_index) {
 
   d <- 1 - shared / union
   d[union == 0] <- 0                     # two empty samples differ by nothing
-  diag(d) <- 0
-  dimnames(d) <- list(colnames(counts), colnames(counts))
-  stats::as.dist(d)
-}
-
-#' @keywords internal
-ap_weighted_unifrac <- function(counts, pd_index, normalized = FALSE) {
-  A <- ap_edge_abundance(counts, pd_index)
-  b <- pd_index$edge_length
-  n <- ncol(counts)
-
-  num <- matrix(0, n, n)
-  den <- matrix(0, n, n)
-  for (i in seq_len(n)) {
-    diff_i <- abs(A - A[, i])
-    num[, i] <- colSums(b * diff_i)
-    if (normalized) den[, i] <- colSums(b * (A + A[, i]))
-  }
-
-  d <- if (normalized) {
-    out <- num / den
-    out[den == 0] <- 0
-    out
-  } else {
-    num
-  }
   diag(d) <- 0
   dimnames(d) <- list(colnames(counts), colnames(counts))
   stats::as.dist(d)

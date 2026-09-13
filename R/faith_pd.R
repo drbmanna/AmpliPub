@@ -11,13 +11,7 @@
 
 #' @keywords internal
 ap_faith_pd_mia <- function(counts, tree) {
-  ap_assert(inherits(tree, "phylo"), "`tree` must be an `ape::phylo`.")
-  ap_assert(!is.null(tree$edge.length),
-            paste0("The tree has no branch lengths, so Faith's PD and UniFrac are ",
-                   "undefined on it. A cladogram cannot give phylogenetic diversity."))
-  ap_assert(all(tree$edge.length >= 0),
-            "The tree has {sum(tree$edge.length < 0)} negative branch length{?s}.")
-  ap_check_tree_covers(tree, rownames(counts))
+  ap_check_phylo(tree, rownames(counts))
 
   # mia 1.16.1 crashes the R session, rather than raising an error, on a tree
   # whose internal nodes are not numbered in traversal order. ape::root() leaves

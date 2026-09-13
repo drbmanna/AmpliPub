@@ -99,7 +99,7 @@ test_that("beta diversity distances match QIIME 2 on the identical rarefied tabl
   x <- ap_import(rt, meta, tree = tree)
 
   b <- ap_beta(x, metrics = c("bray_curtis", "jaccard", "unweighted_unifrac",
-                              "weighted_unifrac", "weighted_normalized_unifrac"),
+                              "weighted_unifrac"),
                rarefy = FALSE)
 
   compare <- function(ours, ref_file) {
@@ -116,19 +116,17 @@ test_that("beta diversity distances match QIIME 2 on the identical rarefied tabl
   p <- compare(b$distances$jaccard, "jaccard_distance_matrix.qza")
   expect_equal(p$ours, p$theirs, tolerance = 1e-10)
 
-  # Our own UniFrac, built on the tip-by-edge index rather than taken from a
-  # package. Tolerance absorbs the float32 branch lengths in the Newick file.
+  # Unweighted UniFrac from AmpliPub's own code, weighted from mia (rbiom), both
+  # checked against scikit-bio through QIIME 2. Tolerance absorbs the float32
+  # branch lengths in the Newick file.
   p <- compare(b$distances$unweighted_unifrac, "unweighted_unifrac_distance_matrix.qza")
   expect_equal(p$ours, p$theirs, tolerance = 1e-5)
 
-  # Which weighted form QIIME 2 reports is settled here rather than assumed:
-  # the raw one agrees and the normalised one does not.
+  # Which weighted form QIIME 2 reports was settled earlier on this table: the
+  # raw one agreed and the normalised one differed by 0.38. rbiom gives the raw
+  # form, and this confirms it matches.
   raw <- compare(b$distances$weighted_unifrac, "weighted_unifrac_distance_matrix.qza")
   expect_equal(raw$ours, raw$theirs, tolerance = 1e-5)
-
-  norm <- compare(b$distances$weighted_normalized_unifrac,
-                  "weighted_unifrac_distance_matrix.qza")
-  expect_gt(max(abs(norm$ours - norm$theirs)), 0.1)
 })
 
 test_that("PCoA variance explained matches QIIME 2", {

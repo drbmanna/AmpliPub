@@ -1,60 +1,101 @@
-# --- UniFrac, against values worked out by hand ---
+# --- UniFrac (weighted from mia/rbiom, unweighted from AmpliPub) ---
+
+test_that("UniFrac matches scikit-bio on pairs that do not span the root", {
+  # Reference values from scikit-bio 0.6.2, QIIME 2's engine, run in the
+  # qiime2-amplicon-2025.7 environment on 2026-09-13. rbiom 2.2.1 gave a
+  # different unweighted value on every one of these pairs, which is why
+  # unweighted UniFrac is not taken from it. The weighted values agreed.
+  t1 <- ape::read.tree(text = "((A:1,B:1):1,C:3);")
+  t2 <- ape::read.tree(text = "(((A:1,B:1):1,C:1):1,D:5);")
+  x1 <- c("A", "B", "C")
+  x2 <- c("A", "B", "C", "D")
+  pair <- function(a, b, ids) matrix(c(a, b), ncol = 2, dimnames = list(ids, c("s1", "s2")))
+  u <- function(m, tr) as.numeric(ap_unifrac(m, tr, weighted = FALSE))
+  w <- function(m, tr) as.numeric(ap_unifrac(m, tr, weighted = TRUE))
+
+  expect_equal(u(pair(c(1, 0, 0), c(1, 1, 0), x1), t1), 1 / 3)
+  expect_equal(u(pair(c(1, 0, 0), c(0, 1, 0), x1), t1), 2 / 3)
+  expect_equal(u(pair(c(1, 0, 0, 0), c(0, 1, 0, 0), x2), t2), 1 / 2)
+  expect_equal(u(pair(c(1, 0, 0, 0), c(1, 0, 1, 0), x2), t2), 1 / 4)
+
+  expect_equal(w(pair(c(1, 0, 0), c(1, 1, 0), x1), t1), 1)
+  expect_equal(w(pair(c(2, 1, 0), c(1, 2, 0), x1), t1), 2 / 3)
+  expect_equal(w(pair(c(1, 0, 0, 0), c(0, 1, 0, 0), x2), t2), 2)
+  expect_equal(w(pair(c(1, 0, 0, 0), c(1, 0, 1, 0), x2), t2), 1.5)
+})
 
 test_that("unweighted UniFrac on a hand-drawn tree equals the fraction computed by hand", {
   tr <- ape::read.tree(text = "((A:1,B:1):1,C:3);")
   ids <- c("A", "B", "C")
-  idx <- ap_pd_index(tr, ids)
 
   # s1 has A only (branches A=1, internal=1, total 2).
   # s2 has C only (branch C=3, total 3).
   # Shared branch length: 0. Union: 5. Unique/union = 5/5 = 1.
   m <- matrix(c(1, 0, 0,
                 0, 0, 1), ncol = 2, dimnames = list(ids, c("s1", "s2")))
-  expect_equal(as.numeric(ap_unweighted_unifrac(m, idx)), 1)
+  expect_equal(as.numeric(ap_unifrac(m, tr, weighted = FALSE)), 1)
 
   # s1 = A, s2 = A and B. Shared 2 (A + internal), union 3 (A + B + internal).
   # Unique = 1, so distance = 1/3.
   m <- matrix(c(1, 0, 0,
                 1, 1, 0), ncol = 2, dimnames = list(ids, c("s1", "s2")))
-  expect_equal(as.numeric(ap_unweighted_unifrac(m, idx)), 1 / 3)
+  expect_equal(as.numeric(ap_unifrac(m, tr, weighted = FALSE)), 1 / 3)
 })
 
 test_that("a sample compared with itself is at distance zero", {
   tr <- ape::read.tree(text = "((A:1,B:2):3,C:4);")
-  idx <- ap_pd_index(tr, c("A", "B", "C"))
   m <- matrix(c(5, 3, 0, 5, 3, 0), ncol = 2,
               dimnames = list(c("A", "B", "C"), c("s1", "s2")))
-  expect_equal(as.numeric(ap_unweighted_unifrac(m, idx)), 0)
-  expect_equal(as.numeric(ap_weighted_unifrac(m, idx)), 0)
+  expect_equal(as.numeric(ap_unifrac(m, tr, weighted = FALSE)), 0)
+  expect_equal(as.numeric(ap_unifrac(m, tr, weighted = TRUE)), 0)
 })
 
 test_that("unweighted UniFrac ignores abundance and weighted UniFrac does not", {
   tr <- ape::read.tree(text = "((A:1,B:1):1,C:3);")
-  idx <- ap_pd_index(tr, c("A", "B", "C"))
   # Same taxa present in both, wildly different proportions.
   m <- matrix(c(99, 1, 0,
                 1, 99, 0), ncol = 2, dimnames = list(c("A", "B", "C"), c("s1", "s2")))
-  expect_equal(as.numeric(ap_unweighted_unifrac(m, idx)), 0)
-  expect_gt(as.numeric(ap_weighted_unifrac(m, idx)), 0)
+  expect_equal(as.numeric(ap_unifrac(m, tr, weighted = FALSE)), 0)
+  expect_gt(as.numeric(ap_unifrac(m, tr, weighted = TRUE)), 0)
 })
 
-test_that("weighted UniFrac equals the branch-weighted difference computed by hand", {
+test_that("weighted UniFrac is the raw branch-weighted difference computed by hand", {
   tr <- ape::read.tree(text = "((A:1,B:1):1,C:3);")
-  idx <- ap_pd_index(tr, c("A", "B", "C"))
   m <- matrix(c(1, 0, 0,
                 0, 1, 0), ncol = 2, dimnames = list(c("A", "B", "C"), c("s1", "s2")))
   # Edge A: |1 - 0| * 1 = 1. Edge B: |0 - 1| * 1 = 1. Internal: |1 - 1| * 1 = 0.
-  # Edge C: 0. Total 2.
-  expect_equal(as.numeric(ap_weighted_unifrac(m, idx)), 2)
+  # Edge C: 0. Total 2. A normalised form would divide this down to at most 1.
+  expect_equal(as.numeric(ap_unifrac(m, tr, weighted = TRUE)), 2)
 })
 
-test_that("the normalised weighted form is bounded at 1 and the raw form is not", {
-  tr <- ape::read.tree(text = "((A:1,B:1):1,C:30);")
-  idx <- ap_pd_index(tr, c("A", "B", "C"))
+test_that("UniFrac on a tree rerooted with ape::root() matches its Newick-read twin", {
+  # mia's Faith's PD crashed on this kind of tree. UniFrac does not crash, and
+  # this checks it does not quietly give a different answer either.
+  counts <- ap_fixture_counts()
+  tr <- ap_fixture_tree(counts)
+  twin <- ape::read.tree(text = ape::write.tree(tr, digits = 17))
+  for (w in c(FALSE, TRUE)) {
+    expect_equal(as.numeric(ap_unifrac(counts, tr, weighted = w)),
+                 as.numeric(ap_unifrac(counts, twin, weighted = w)),
+                 tolerance = 1e-10)
+  }
+})
+
+test_that("sample order in the distance follows the table, not the package", {
+  tr <- ape::read.tree(text = "((A:1,B:1):1,C:3);")
   m <- matrix(c(1, 0, 0,
-                0, 0, 1), ncol = 2, dimnames = list(c("A", "B", "C"), c("s1", "s2")))
-  expect_lte(as.numeric(ap_weighted_unifrac(m, idx, normalized = TRUE)), 1)
-  expect_gt(as.numeric(ap_weighted_unifrac(m, idx, normalized = FALSE)), 1)
+                1, 1, 0,
+                0, 0, 1), ncol = 3,
+              dimnames = list(c("A", "B", "C"), c("zeta", "alpha", "mid")))
+  d <- ap_unifrac(m, tr, weighted = FALSE)
+  expect_equal(attr(d, "Labels"), c("zeta", "alpha", "mid"))
+  expect_equal(as.matrix(d)["zeta", "alpha"], 1 / 3)
+})
+
+test_that("a tree without branch lengths is refused for UniFrac", {
+  tr <- ape::read.tree(text = "((A,B),C);")
+  m <- matrix(c(1, 0, 0, 0, 0, 1), ncol = 2, dimnames = list(c("A", "B", "C"), c("s1", "s2")))
+  expect_error(ap_unifrac(m, tr, weighted = FALSE), "no branch lengths")
 })
 
 # --- ap_beta ---

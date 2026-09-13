@@ -43,6 +43,18 @@ Computes several between-sample distances side by side.
    \code{weighted_unifrac} \tab yes \tab yes \cr
    \code{aitchison} \tab yes, compositionally \tab no \cr
 }
+
+
+Bray-Curtis and Jaccard come from \code{vegan::vegdist}, weighted UniFrac from
+\code{mia::getDissimilarity(method = "unifrac")} (which calls \code{rbiom::unifrac}),
+and Aitchison from \code{vegan::vegdist(method = "aitchison")}. Weighted UniFrac is
+the raw form, the one QIIME 2 reports; rbiom offers no normalised form.
+
+Unweighted UniFrac is computed by AmpliPub itself, the one exception. rbiom
+gives a different unweighted value from scikit-bio (QIIME 2's engine) for any
+pair of samples that does not span the root of the tree, and phyloseq differs
+from QIIME 2 on real data. AmpliPub's version is tested against scikit-bio
+reference values and against QIIME 2 output.
 }
 \section{Rarefaction}{
 

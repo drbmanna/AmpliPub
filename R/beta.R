@@ -18,6 +18,17 @@
 #' | `weighted_unifrac` | yes | yes |
 #' | `aitchison` | yes, compositionally | no |
 #'
+#' Bray-Curtis and Jaccard come from `vegan::vegdist`, weighted UniFrac from
+#' `mia::getDissimilarity(method = "unifrac")` (which calls `rbiom::unifrac`),
+#' and Aitchison from `vegan::vegdist(method = "aitchison")`. Weighted UniFrac is
+#' the raw form, the one QIIME 2 reports; rbiom offers no normalised form.
+#'
+#' Unweighted UniFrac is computed by AmpliPub itself, the one exception. rbiom
+#' gives a different unweighted value from scikit-bio (QIIME 2's engine) for any
+#' pair of samples that does not span the root of the tree, and phyloseq differs
+#' from QIIME 2 on real data. AmpliPub's version is tested against scikit-bio
+#' reference values and against QIIME 2 output.
+#'
 #' @section Rarefaction:
 #' Bray-Curtis and Jaccard are sensitive to library size, so rarefaction is
 #' applied by default, once, with the seed recorded. Aitchison distance works
@@ -50,7 +61,7 @@ ap_beta <- function(x,
                     pseudocount = 0.5) {
 
   known <- c("bray_curtis", "jaccard", "unweighted_unifrac", "weighted_unifrac",
-             "weighted_normalized_unifrac", "aitchison", "euclidean")
+             "aitchison", "euclidean")
   bad <- setdiff(metrics, known)
   ap_assert(length(bad) == 0L,
             "{cli::qty(length(bad))}Unknown metric{?s}: {paste(bad, collapse = ', ')}. Known: {paste(known, collapse = ', ')}.")
@@ -88,10 +99,6 @@ ap_beta <- function(x,
     counts <- counts[rowSums(counts) > 0, , drop = FALSE]
   }
 
-  pd_index <- if (any(grepl("unifrac", metrics))) {
-    ap_pd_index(tree, rownames(counts))
-  } else NULL
-
   distances <- list()
   for (m in metrics) {
     distances[[m]] <- switch(
@@ -99,9 +106,8 @@ ap_beta <- function(x,
       bray_curtis = vegan::vegdist(t(counts), method = "bray"),
       jaccard = vegan::vegdist(t(counts), method = "jaccard", binary = TRUE),
       euclidean = stats::dist(t(counts)),
-      unweighted_unifrac = ap_unweighted_unifrac(counts, pd_index),
-      weighted_unifrac = ap_weighted_unifrac(counts, pd_index, normalized = FALSE),
-      weighted_normalized_unifrac = ap_weighted_unifrac(counts, pd_index, normalized = TRUE),
+      unweighted_unifrac = ap_unifrac(counts, tree, weighted = FALSE),
+      weighted_unifrac = ap_unifrac(counts, tree, weighted = TRUE),
       aitchison = ap_aitchison(counts, pseudocount = pseudocount)
     )
   }
@@ -120,6 +126,39 @@ ap_beta <- function(x,
   )
 }
 
+# UniFrac. Weighted comes from mia::getDissimilarity(method = "unifrac"), which
+# calls rbiom::unifrac and computes the raw form QIIME 2 reports. Unweighted comes
+# from AmpliPub's own code in unifrac.R, because rbiom's unweighted value departs
+# from scikit-bio for pairs that do not span the root (see that file). Both keep
+# the sample order of the table.
+#' @keywords internal
+ap_unifrac <- function(counts, tree, weighted) {
+  ap_check_phylo(tree, rownames(counts))
+  if (!weighted) {
+    return(ap_unweighted_unifrac(counts, ap_pd_index(tree, rownames(counts))))
+  }
+  se <- TreeSummarizedExperiment::TreeSummarizedExperiment(
+    assays = list(counts = counts), rowTree = tree
+  )
+  d <- mia::getDissimilarity(se, method = "unifrac", weighted = weighted, tree = tree)
+  ids <- colnames(counts)
+  stats::as.dist(as.matrix(d)[ids, ids])
+}
+
+# The guards every phylogenetic metric needs. A tree without branch lengths, or
+# with negative ones, gives a number that looks like diversity and is not.
+#' @keywords internal
+ap_check_phylo <- function(tree, feature_ids) {
+  ap_assert(inherits(tree, "phylo"), "`tree` must be an `ape::phylo`.")
+  ap_assert(!is.null(tree$edge.length),
+            paste0("The tree has no branch lengths, so Faith's PD and UniFrac are ",
+                   "undefined on it. A cladogram cannot give phylogenetic diversity."))
+  ap_assert(all(tree$edge.length >= 0),
+            "The tree has {sum(tree$edge.length < 0)} negative branch length{?s}.")
+  ap_check_tree_covers(tree, feature_ids)
+  invisible(TRUE)
+}
+
 #' Aitchison distance
 #'
 #' Euclidean distance between centred log-ratio transformed samples. This is
@@ -130,6 +169,12 @@ ap_beta <- function(x,
 #'
 #' The CLR is undefined at zero, and sequencing tables are mostly zeros. The
 #' replacement used is recorded in the result rather than applied silently.
+#'
+#' Zeros, and only zeros, are replaced by `pseudocount`, and the distance is then
+#' computed by `vegan::vegdist(method = "aitchison")` on the now-positive table.
+#' vegan's own `pseudocount` argument is not used because it adds the value to
+#' every count, which makes the distance change when a sample's depth is scaled.
+#' Scale invariance is the property Aitchison distance exists to have.
 #'
 #' @param counts Feature-by-sample count matrix.
 #' @param pseudocount Value substituted for zeros. Default `0.5`.
@@ -148,9 +193,7 @@ ap_aitchison <- function(counts, pseudocount = 0.5) {
   }
   m <- counts
   m[m == 0] <- pseudocount
-  logm <- log(m)
-  clr <- sweep(logm, 2, colMeans(logm), "-")
-  stats::dist(t(clr))
+  vegan::vegdist(t(m), method = "aitchison")
 }
 
 #' @export

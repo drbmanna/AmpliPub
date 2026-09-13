@@ -24,4 +24,10 @@ fall in every other.
 \details{
 The CLR is undefined at zero, and sequencing tables are mostly zeros. The
 replacement used is recorded in the result rather than applied silently.
+
+Zeros, and only zeros, are replaced by \code{pseudocount}, and the distance is then
+computed by \code{vegan::vegdist(method = "aitchison")} on the now-positive table.
+vegan's own \code{pseudocount} argument is not used because it adds the value to
+every count, which makes the distance change when a sample's depth is scaled.
+Scale invariance is the property Aitchison distance exists to have.
 }
