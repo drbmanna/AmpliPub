@@ -189,17 +189,24 @@ ap_eta_squared <- function(sm) {
 
 #' @keywords internal
 ap_epsilon_squared <- function(H, n, k, v, g, n_boot) {
-  est <- (H - k + 1) / (n - k)
+  est <- ap_epsilon_squared_point(H, n, k)
   boots <- vapply(seq_len(n_boot), function(i) {
     idx <- sample(seq_len(n), replace = TRUE)
     gi <- droplevels(g[idx])
     if (nlevels(gi) < 2L) return(NA_real_)
     h <- tryCatch(unname(stats::kruskal.test(v[idx], gi)$statistic),
                   error = function(e) NA_real_)
-    (h - nlevels(gi) + 1) / (n - nlevels(gi))
+    ap_epsilon_squared_point(h, n, nlevels(gi))
   }, numeric(1))
   list(name = "epsilon squared", estimate = est,
        ci = unname(stats::quantile(boots, c(0.025, 0.975), na.rm = TRUE)))
+}
+
+# Epsilon squared from a Kruskal-Wallis H. Shared with ap_screen(), which needs
+# the point estimate thousands of times and no interval.
+#' @keywords internal
+ap_epsilon_squared_point <- function(H, n, k) {
+  (H - k + 1) / (n - k)
 }
 
 #' @keywords internal

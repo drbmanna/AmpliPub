@@ -121,3 +121,26 @@ ap_fixture_qza <- function(dir, type, format, files,
 skip_if_no_ancombc2 <- function() {
   for (p in c("ANCOMBC", "mia", "microbiome")) skip_if_not_installed(p)
 }
+
+# An ap_alpha object built directly from values and metadata, so a test can plant
+# exactly the alpha signal it needs without going through rarefaction.
+ap_fixture_alpha <- function(values, meta, metric = "q1") {
+  vals <- data.frame(sample_id = rownames(meta), metric = metric, value = values,
+                     stringsAsFactors = FALSE)
+  structure(list(values = vals, metrics = metric, rarefied = FALSE,
+                 depth = NA_real_, n_iter = 1L, seed = NA_integer_,
+                 dropped = character(0), metadata = meta),
+            class = "ap_alpha")
+}
+
+# Alpha and beta on the standard fixture. Variables that survive the screen's
+# guards: group, batch_run (identical to group), sex, age. subject and constant
+# are skipped.
+ap_fixture_screen_inputs <- function() {
+  x <- ap_fixture_object(tree = FALSE, taxonomy = FALSE)
+  list(
+    x = x,
+    alpha = suppressMessages(ap_alpha(x, metrics = c("q0", "q1"), rarefy = FALSE)),
+    beta = ap_beta(x, metrics = "bray_curtis", rarefy = FALSE)
+  )
+}
