@@ -36,7 +36,7 @@ accession -> FASTQ -> read QC -> QIIME 2 processing -> feature table -> statisti
 |---|---|---|
 | Demultiplexing | `workflow/00_demux.py`: EMP-protocol demultiplexing with full read accounting and a barcode-orientation guard | Built, tested |
 | Download | `workflow/00_fetch_sra.py`: one accession in, verified FASTQ, sample metadata, and a QIIME 2 manifest out | Built, tested |
-| Environments | `workflow/setup_envs.sh`: the QIIME 2 amplicon 2025.7 release plus a pinned QC environment | Built |
+| Environments | `workflow/setup_envs.sh`: QIIME 2 amplicon 2025.7, QC, Snakemake and R environments, each built from a committed lockfile | Built |
 | Read QC | `workflow/00_qc_raw.py`: FastQC and MultiQC, before and after primer removal | Built, tested |
 | Primer removal | `workflow/01_primers.py`: QIIME 2 (cutadapt), anchored primers, reads counted in and out | Built, tested |
 | Quality and truncation | `workflow/02_quality.py`: QIIME 2 quality profiles, with an overlap check before reads are merged | Built, tested |

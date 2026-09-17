@@ -31,9 +31,12 @@ conda run -n amplipub-snakemake snakemake -s /path/to/AmpliPub/workflow/Snakefil
   and `provenance/`. Provenance holds the git commit, every conda environment exported,
   `sessionInfo()`, the resolved config and the sha256 of every analysis input.
 
-The R stages run in the `amplipub-r` environment, which pins R 4.5.3 and every package
-version (`envs/amplipub-r.yml`). `setup_envs.sh` installs AmpliPub into it from this
-checkout, so the package a run uses is the commit that holds the workflow.
+The R stages run in the `amplipub-r` environment. Every run first installs AmpliPub into
+it from this checkout (rule `install_amplipub`, recorded in
+`provenance/amplipub_install.tsv`), so the package that ran is the commit in
+`provenance/git_commit.txt`. The run also compares each environment with its lockfile and
+writes any difference to `provenance/env_lock_<env>.tsv`, with a warning in the log. A
+difference does not stop the run.
 
 ## Setup
 
@@ -41,10 +44,22 @@ checkout, so the package a run uses is the commit that holds the workflow.
 bash workflow/setup_envs.sh
 ```
 
-Creates two conda environments. `qiime2-amplicon-2025.7` comes from the official QIIME 2
-release file. `amplipub-qc` holds FastQC and MultiQC, pinned in `envs/qc.yml`. The QC
-tools stay out of the QIIME 2 environment so the release environment is never modified.
-Rerunning is safe: existing environments are only checked, not rebuilt.
+Creates four conda environments from the lockfiles in `envs/`:
+`qiime2-amplicon-2025.7`, `amplipub-qc` (FastQC and MultiQC), `amplipub-snakemake` and
+`amplipub-r`. The QC tools stay out of the QIIME 2 environment so the release environment
+is never modified.
+
+A lockfile (`conda list --explicit --md5`) names every package, dependencies included,
+with its exact build and md5, so no solver runs. The `*.yml` files pin only the packages
+we name. On 2026-09-13 the solver filled that gap with an rbiom that mia 1.18.0 could not
+load, which is why the lockfiles exist. The lockfiles are for linux-64 only.
+
+- Rerunning is safe. An existing environment is compared with its lockfile, and the
+  script stops if they differ.
+- `--rebuild` removes every environment and recreates it from its lockfile.
+- `--from-spec` solves the `*.yml` files instead, for a deliberate upgrade (and on other
+  platforms). Test the result, then re-lock and commit:
+  `conda list -n ENV --explicit --md5 > workflow/envs/ENV.lock`.
 
 ## 00_demux.py
 

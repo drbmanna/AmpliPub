@@ -65,15 +65,50 @@ tree <- ap_read_qza(inp[["tree"]])
 taxonomy <- ap_read_qza(inp[["taxonomy"]])
 
 x <- ap_import(ap_read_qza(inp[["table"]]), meta, tree = tree, taxonomy = taxonomy)
-x_rarefied <- ap_import(ap_read_qza(inp[["rarefied"]]), meta, tree = tree, taxonomy = taxonomy)
 ap_summary(x)
-ap_summary(x_rarefied)
 
 settings <- utils::read.delim(inp[["diversity_settings"]], stringsAsFactors = FALSE)
 depth <- as.integer(settings$value[settings$setting == "sampling_depth"])
 stopifnot(length(depth) == 1L, !is.na(depth))
-stopifnot(length(unique(colSums(SummarizedExperiment::assay(x_rarefied, "counts")))) == 1L)
 cat("rarefaction depth from 10_diversity:", depth, "\n")
+
+# Rarefy in R, under this run's seed. Decided 2026-09-16, after the same config run twice
+# gave different alpha, beta, PERMANOVA and screen numbers: QIIME 2's
+# `core-metrics-phylogenetic` subsamples once from an RNG it does not expose. It has no
+# `--p-random-seed` (unlike `feature-table rarefy`), and its help says the seed "Defaults to
+# a random seed". Recomputing here also follows the locked design decision that everything
+# is recomputed in R and QIIME 2 is the cross-check, never the source.
+rarefied_counts <- ap_normalize(x, method = "rarefy", depth = depth, seed = an$seed)
+x_rarefied <- x[rownames(rarefied_counts), colnames(rarefied_counts)]
+SummarizedExperiment::assay(x_rarefied, "counts") <- rarefied_counts
+stopifnot(length(unique(colSums(SummarizedExperiment::assay(x_rarefied, "counts")))) == 1L)
+cat("rarefied in R:", ncol(x_rarefied), "samples at depth", depth,
+    "with seed", an$seed, "\n")
+
+# QIIME 2's own rarefied table, kept as the independent cross-check it is meant to be.
+# The depths must agree exactly. The values will not, because its subsample is unseeded, so
+# the check is that two independent draws at the same depth agree on richness to within
+# subsampling noise, not that they are equal.
+x_rarefied_qiime <- ap_import(ap_read_qza(inp[["rarefied"]]), meta, tree = tree,
+                              taxonomy = taxonomy)
+q0_r <- ap_alpha(x_rarefied, metrics = "q0", rarefy = FALSE)$values
+q0_q <- ap_alpha(x_rarefied_qiime, metrics = "q0", rarefy = FALSE)$values
+shared <- intersect(q0_r$sample, q0_q$sample)
+cross <- data.frame(
+  quantity = c("samples_r", "samples_qiime", "samples_shared", "depth_r", "depth_qiime",
+               "q0_mean_abs_diff", "q0_max_abs_diff", "q0_spearman"),
+  value = c(
+    ncol(x_rarefied), ncol(x_rarefied_qiime), length(shared),
+    unique(colSums(SummarizedExperiment::assay(x_rarefied, "counts"))),
+    unique(colSums(SummarizedExperiment::assay(x_rarefied_qiime, "counts"))),
+    mean(abs(q0_r$value[match(shared, q0_r$sample)] - q0_q$value[match(shared, q0_q$sample)])),
+    max(abs(q0_r$value[match(shared, q0_r$sample)] - q0_q$value[match(shared, q0_q$sample)])),
+    stats::cor(q0_r$value[match(shared, q0_r$sample)],
+               q0_q$value[match(shared, q0_q$sample)], method = "spearman")
+  )
+)
+print(cross)
+write_tsv(cross, "rarefaction_crosscheck")
 
 # --- design -----------------------------------------------------------------------------------
 
@@ -199,7 +234,10 @@ sha256 <- function(path) {
   p <- normalizePath(path)
   sub(" .*$", "", system2("sha256sum", shQuote(p), stdout = TRUE))
 }
+# snakemake@input holds every input twice, once positionally and once by name, so the
+# unnamed half would write six sha256 rows labelled only "sha256:" with no file behind them.
 input_files <- unlist(inp)
+input_files <- input_files[nzchar(names(input_files))]
 run_info <- data.frame(
   key = c("started", "finished", "r_version", "amplipub_version", "seed", "permutations",
           "n_resample", "rarefaction_depth", paste0("sha256:", names(input_files))),

@@ -133,3 +133,58 @@ test_that("import fails when too many samples lack metadata", {
   meta <- ap_fixture_metadata(counts)[1:3, , drop = FALSE]
   expect_error(ap_import(counts, meta), "above the 10% limit")
 })
+
+
+# ---- feature order is imposed, not inherited ------------------------------
+#
+# Upstream order is not stable: the same Snakemake config run twice produced the same 829
+# features in a different order, and ALDEx2 draws its Monte Carlo instances feature by
+# feature from the RNG stream, so an identical seed on a differently ordered table gave
+# different results. A seed cannot fix that, so `ap_import()` imposes the order.
+
+test_that("features come back in a fixed order whatever order they arrived in", {
+  counts <- ap_fixture_counts()
+  meta <- ap_fixture_metadata(counts)
+
+  set.seed(99)
+  shuffled <- counts[sample(nrow(counts)), , drop = FALSE]
+  expect_false(identical(rownames(counts), rownames(shuffled)))
+
+  a <- ap_import(counts, meta)
+  b <- ap_import(shuffled, meta)
+
+  expect_identical(rownames(a), rownames(b))
+  expect_identical(rownames(a), sort(rownames(counts), method = "radix"))
+  # the values must travel with their feature, not just the names
+  expect_equal(SummarizedExperiment::assay(a, "counts"),
+               SummarizedExperiment::assay(b, "counts"))
+})
+
+test_that("a shuffled table gives the same differential abundance result", {
+  counts <- ap_fixture_counts()
+  meta <- ap_fixture_metadata(counts)
+  set.seed(7)
+  shuffled <- counts[sample(nrow(counts)), , drop = FALSE]
+
+  a <- suppressWarnings(ap_da(ap_import(counts, meta), group = "group",
+                              method = "aldex2", seed = 1L))
+  b <- suppressWarnings(ap_da(ap_import(shuffled, meta), group = "group",
+                              method = "aldex2", seed = 1L))
+  key <- function(d) d$results[order(d$results$feature), c("feature", "effect", "p")]
+  expect_equal(key(a), key(b), tolerance = 1e-12)
+})
+
+test_that("taxonomy and tree follow the reordered features", {
+  counts <- ap_fixture_counts()
+  meta <- ap_fixture_metadata(counts)
+  tax <- ap_fixture_taxonomy(counts)
+  set.seed(11)
+  shuffled <- counts[sample(nrow(counts)), , drop = FALSE]
+
+  x <- ap_import(shuffled, meta, taxonomy = tax)
+  rd <- as.data.frame(SummarizedExperiment::rowData(x))
+  direct <- ap_import(counts, meta, taxonomy = tax)
+  expect_identical(rownames(rd), rownames(as.data.frame(SummarizedExperiment::rowData(direct))))
+  expect_identical(rd$genus,
+                   as.data.frame(SummarizedExperiment::rowData(direct))$genus)
+})

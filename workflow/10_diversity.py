@@ -89,8 +89,37 @@ def run_cmd(cmd: list[str], timeout: int) -> tuple[int, str, str]:
     return proc.returncode, out, err
 
 
-def _tail(text: str, n: int = 15) -> str:
-    return "\n".join(text.strip().splitlines()[-n:])
+def _excerpt(text: str, head: int = 5, tail: int = 15) -> str:
+    """Both ends of a failed command's output, not just the tail.
+
+    QIIME 2 reports an argument error as a numbered list whose first entry is the reason
+    and whose remaining entries are consequences of it, so a tail-only excerpt drops the
+    one line that explains the failure.
+    """
+    lines = text.strip().splitlines()
+    if len(lines) <= head + tail:
+        return "\n".join(lines)
+    omitted = len(lines) - head - tail
+    return "\n".join(lines[:head] + [f"... {omitted} line(s) omitted ..."] + lines[-tail:])
+
+
+def fresh_output_dir(path: str) -> None:
+    """Clear the way for `qiime ... --output-dir`, which refuses an existing directory.
+
+    A workflow engine creates the parent directories of a rule's declared outputs before
+    the rule runs, so this stage can be handed an empty `core_metrics/` that it did not
+    make. That empty directory is removed. A non-empty one holds real results and stops
+    the stage rather than being deleted.
+    """
+    if not os.path.isdir(path):
+        return
+    contents = os.listdir(path)
+    if contents:
+        raise DiversityError(
+            f"{path} already exists and is not empty ({len(contents)} entries). "
+            "core-metrics-phylogenetic will not write into it. Move or delete it, or "
+            "run into a fresh output directory")
+    os.rmdir(path)
 
 
 def read_from_artifact(qza: str, suffix: str) -> str:
@@ -109,7 +138,7 @@ def export_table(qza: str, outdir: str, tag: str, env: str, timeout: int) -> str
     rc, _, err = run_cmd(["conda", "run", "-n", env, "qiime", "tools", "export",
                           "--input-path", qza, "--output-path", dest], timeout)
     if rc != 0:
-        raise DiversityError(f"export failed on {qza} with code {rc}:\n{_tail(err)}")
+        raise DiversityError(f"export failed on {qza} with code {rc}:\n{_excerpt(err)}")
     biom = os.path.join(dest, "feature-table.biom")
     if not os.path.isfile(biom):
         raise DiversityError(f"export finished but wrote no {biom}")
@@ -117,7 +146,7 @@ def export_table(qza: str, outdir: str, tag: str, env: str, timeout: int) -> str
     rc, _, err = run_cmd(["conda", "run", "-n", env, "biom", "convert", "-i", biom,
                           "-o", tsv, "--to-tsv"], timeout)
     if rc != 0:
-        raise DiversityError(f"biom convert exited with code {rc}:\n{_tail(err)}")
+        raise DiversityError(f"biom convert exited with code {rc}:\n{_excerpt(err)}")
     return tsv
 
 
@@ -400,11 +429,12 @@ def run(args) -> None:
            "--m-metadata-file", metadata, "--o-visualization", curves]
     rc, _, err = run_cmd(cmd, args.timeout)
     if rc != 0:
-        raise DiversityError(f"alpha-rarefaction exited with code {rc}:\n{_tail(err)}")
+        raise DiversityError(f"alpha-rarefaction exited with code {rc}:\n{_excerpt(err)}")
     log.info("rarefaction curves: %d iterations per step, averaged. This is rarefaction "
              "in Schloss 2024's sense", args.iterations)
 
     core = os.path.join(outdir, "core_metrics")
+    fresh_output_dir(core)
     rc, _, err = run_cmd(["conda", "run", "-n", args.env, "qiime", "diversity",
                           "core-metrics-phylogenetic", "--i-table", table,
                           "--i-phylogeny", tree, "--p-sampling-depth", str(depth),
@@ -413,7 +443,7 @@ def run(args) -> None:
                           "--output-dir", core], args.timeout)
     if rc != 0:
         raise DiversityError(f"core-metrics-phylogenetic exited with code {rc}:"
-                             f"\n{_tail(err)}")
+                             f"\n{_excerpt(err)}")
     if not os.path.isdir(core):
         raise DiversityError(f"core-metrics finished but wrote no {core}")
     log.warning("core-metrics-phylogenetic subsamples ONCE at depth %d. Schloss 2024 "
@@ -437,7 +467,7 @@ def run(args) -> None:
                                   "--o-visualization", out], args.timeout)
             if rc != 0:
                 raise DiversityError(f"alpha-group-significance failed on {metric} "
-                                     f"with code {rc}:\n{_tail(err)}")
+                                     f"with code {rc}:\n{_excerpt(err)}")
             tests.append(("alpha", metric, column, out))
         for matrix in ("unweighted_unifrac_distance_matrix",
                        "weighted_unifrac_distance_matrix",
@@ -458,7 +488,7 @@ def run(args) -> None:
                                   "--o-visualization", out], args.timeout)
             if rc != 0:
                 raise DiversityError(f"beta-group-significance failed on {matrix} "
-                                     f"with code {rc}:\n{_tail(err)}")
+                                     f"with code {rc}:\n{_excerpt(err)}")
             tests.append(("beta", matrix, column, out))
     if not args.group_column:
         log.warning("no --group-column, so no group test was run. The metrics are "

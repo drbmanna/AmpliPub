@@ -380,3 +380,49 @@ def test_a_stalled_command_is_killed():
     with pytest.raises(dv.DiversityError, match="timed out after 1 s"):
         dv.run_cmd(["sh", "-c", "sleep 30"], timeout=1)
     assert time.monotonic() - start < 10
+
+
+# ---- the output directory a workflow engine made for us ------------------
+#
+# Snakemake creates the parent directories of a rule's declared outputs before the rule
+# runs. One of this stage's declared outputs is core_metrics/rarefied_table.qza, so the
+# stage is handed an empty core_metrics/ and `qiime ... --output-dir` refuses it. That is
+# what failed the first dev-subset end-to-end run on 2026-09-16.
+
+def test_an_empty_pre_made_output_dir_is_cleared(tmp_path):
+    core = tmp_path / "core_metrics"
+    core.mkdir()
+    dv.fresh_output_dir(str(core))
+    assert not core.exists()
+
+
+def test_a_non_empty_output_dir_stops_the_stage(tmp_path):
+    core = tmp_path / "core_metrics"
+    core.mkdir()
+    (core / "rarefied_table.qza").write_text("real results")
+    with pytest.raises(dv.DiversityError, match="not empty"):
+        dv.fresh_output_dir(str(core))
+    assert (core / "rarefied_table.qza").exists(), "a real result must not be deleted"
+
+
+def test_a_missing_output_dir_is_left_alone(tmp_path):
+    core = tmp_path / "core_metrics"
+    dv.fresh_output_dir(str(core))
+    assert not core.exists()
+
+
+# ---- the error excerpt ---------------------------------------------------
+
+def test_the_reason_survives_truncation():
+    """QIIME puts the reason in entry (1/N) and 17 consequences after it."""
+    lines = ["Invalid value for '--output-dir': '/x/core_metrics' already exists"]
+    lines += [f"({i}/18) Missing option '--o-thing{i}'." for i in range(2, 40)]
+    got = dv._excerpt("\n".join(lines))
+    assert "already exists" in got
+    assert "line(s) omitted" in got
+    assert "(39/18)" in got, "the tail is kept too"
+
+
+def test_short_output_is_not_truncated():
+    text = "one\ntwo\nthree"
+    assert dv._excerpt(text) == text

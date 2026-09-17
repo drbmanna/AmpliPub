@@ -11,6 +11,7 @@ Two layers, so that CI without Snakemake still checks something real:
 from __future__ import annotations
 
 import copy
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -100,5 +101,23 @@ def test_dry_run_schedules_every_stage_in_order(tmp_path):
     for rule in ["reference_metadata", "reference_mock", "classifier", "fetch_sra", "qc_raw",
                  "import_demux", "primers", "quality", "dada2", "mock", "taxonomy",
                  "resolution", "collapse", "filter", "tree", "diversity",
-                 "provenance_environments", "amplipub_analysis", "report"]:
+                 "provenance_environments", "install_amplipub", "amplipub_analysis",
+                 "report"]:
         assert rule in out, f"rule {rule} was not scheduled"
+
+
+@pytest.mark.skipif(shutil.which("snakemake") is None, reason="Snakemake is not installed")
+def test_analysis_depends_on_installing_the_checkout(tmp_path):
+    """The recorded commit is only the code that ran if the install precedes the analysis."""
+    cfg_path = tmp_path / "config.yaml"
+    with open(cfg_path, "w") as fh:
+        yaml.safe_dump(tiny_config(tmp_path), fh)
+    proc = subprocess.run(
+        ["snakemake", "-s", str(SNAKEFILE), "--configfile", str(cfg_path),
+         "--directory", str(tmp_path / "work"), "--forceall", "--rulegraph"],
+        capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    ids = dict(re.findall(r'^\s*(\d+)\[label = "(\w+)"', proc.stdout, re.M))
+    edges = {(ids[a], ids[b]) for a, b in re.findall(r"^\s*(\d+) -> (\d+)", proc.stdout, re.M)}
+    assert ("install_amplipub", "amplipub_analysis") in edges, sorted(edges)

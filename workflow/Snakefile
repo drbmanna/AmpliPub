@@ -4,7 +4,8 @@
 # documents. The QIIME 2 and QC stages enter their conda environments themselves
 # (`conda run -n <env>`), so those rules carry no conda directive and `conda` must be on
 # PATH. Only the R analysis and the report run in a Snakemake-managed environment: the
-# named env amplipub-r, which is where setup_envs.sh installs AmpliPub from this checkout.
+# named env amplipub-r, into which rule install_amplipub installs AmpliPub from this
+# checkout on every run.
 #
 # Run from the repository root:
 #   snakemake -s workflow/Snakefile --configfile /path/to/config.yaml --sdm conda --cores 12
@@ -342,12 +343,26 @@ rule diversity:
 
 # --- R: AmpliPub analysis and report -------------------------------------------------------
 
+# The committed lockfile for each env role. The env names are configurable; what the env
+# must contain is not.
+LOCKS = {"qiime2": WF / "envs" / "qiime2-amplicon-2025.7.lock",
+         "qc": WF / "envs" / "amplipub-qc.lock",
+         "r": WF / "envs" / "amplipub-r.lock"}
+
+
 rule provenance_environments:
     output: str(OUT / "provenance" / "environments.done")
     log: str(LOGS / "provenance_environments.log")
     params:
         outdir=OUT / "provenance", repo=WF.parent,
         envs=" ".join(Q(e) for e in (ENV["qiime2"], ENV["qc"], ENV["r"])),
+        # Every difference is recorded in env_lock_<env>.tsv and warned about in the log;
+        # a difference does not stop the run (decided 2026-09-17).
+        lock_checks=" && ".join(
+            f"{Q(PY)} {Q(str(WF / 'scripts' / 'check_env_lock.py'))} --report-only "
+            f"--env {Q(ENV[role])} --lock {Q(str(lock))} "
+            f"-o {Q(str(OUT / 'provenance' / ('env_lock_' + ENV[role] + '.tsv')))}"
+            for role, lock in LOCKS.items()),
     shell:
         """
         (
@@ -356,6 +371,7 @@ rule provenance_environments:
           for e in {params.envs}; do
             conda env export -n "$e" --no-builds > {params.outdir}/env_"$e".yml </dev/null
           done
+          {params.lock_checks}
           snakemake --version > {params.outdir}/snakemake_version.txt
           git -C {params.repo} rev-parse HEAD > {params.outdir}/git_commit.txt
           git -C {params.repo} status --porcelain > {params.outdir}/git_status.txt
@@ -364,8 +380,40 @@ rule provenance_environments:
         """
 
 
+# The analysis loads the INSTALLED AmpliPub. Until 2026-09-17 nothing in the workflow put
+# the checkout there, so git_commit.txt could name code that never ran (three runs used a
+# 2026-09-13 install). This rule installs the checkout into the env on every run and is an
+# input of the analysis, so the recorded commit is the code that ran. R CMD INSTALL does
+# not install dependencies, so it cannot change the locked env. The package sources are
+# inputs, so an edit to them reinstalls even in an existing results directory.
+rule install_amplipub:
+    input:
+        description=str(WF.parent / "DESCRIPTION"),
+        namespace=str(WF.parent / "NAMESPACE"),
+        sources=sorted(str(f) for f in (WF.parent / "R").glob("*.R")),
+    output: str(OUT / "provenance" / "amplipub_install.tsv")
+    log: str(LOGS / "install_amplipub.log")
+    params: repo=WF.parent
+    conda: ENV["r"]
+    shell:
+        """
+        (
+          set -e
+          commit=$(git -C {params.repo} rev-parse HEAD)
+          dirty=$(git -C {params.repo} status --porcelain -- R DESCRIPTION NAMESPACE | wc -l)
+          R CMD INSTALL --no-multiarch {params.repo} </dev/null
+          ver=$(Rscript -e 'cat(as.character(utils::packageVersion("AmpliPub")))' </dev/null)
+          lib=$(Rscript -e 'cat(dirname(find.package("AmpliPub")))' </dev/null)
+          printf '%s\\t%s\\n' version "$ver" libpath "$lib" git_commit "$commit" \\
+            uncommitted_package_files "$dirty" > {output}.tmp
+          mv {output}.tmp {output}
+        ) > {log} 2>&1
+        """
+
+
 rule amplipub_analysis:
     input:
+        installed=rules.install_amplipub.output,
         table=rules.filter.output.table,
         tree=rules.tree.output,
         taxonomy=rules.taxonomy.output,

@@ -77,6 +77,15 @@ ap_import <- function(table,
 
   counts <- ap_check_no_empty(counts, drop_empty_features = drop_empty_features)
 
+  # Features go into a fixed order, because upstream order is not stable and some results
+  # depend on it. The same Snakemake config run twice produced the same 829 features in a
+  # different order, and ALDEx2 draws its Monte Carlo instances feature by feature from the
+  # RNG stream, so an identical seed on a differently ordered table gave different draws per
+  # feature. A seed cannot fix that; the order has to be imposed. `method = "radix"` sorts
+  # in C collation rather than the session locale, so the order is the same on every
+  # machine. Samples are deliberately left in the table's own order, per the join above.
+  counts <- counts[order(rownames(counts), method = "radix"), , drop = FALSE]
+
   row_data <- S4Vectors::DataFrame(row.names = rownames(counts))
   if (!is.null(taxonomy)) {
     tax <- ap_load_taxonomy(taxonomy)
