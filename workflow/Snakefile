@@ -129,12 +129,16 @@ rule import_demux:
     output: str(Q2 / "demux.qza")
     log: str(LOGS / "import_demux.log")
     benchmark: str(BENCH / "import_demux.tsv")
+    # The manifest's paths start with $PWD (00_fetch_sra.py), so the import runs from the
+    # manifest's directory. Output and log are made absolute first, since the cd would
+    # otherwise move a relative outdir.
     params: env=ENV["qiime2"]
     shell:
-        "conda run -n {params.env} qiime tools import "
+        "out=$(realpath -m {output}) && logf=$(realpath -m {log}) && "
+        "cd \"$(dirname {input})\" && conda run -n {params.env} qiime tools import "
         "--type 'SampleData[PairedEndSequencesWithQuality]' "
-        "--input-path {input} --output-path {output} "
-        "--input-format PairedEndFastqManifestPhred33V2 > {log} 2>&1 </dev/null"
+        "--input-path manifest.tsv --output-path \"$out\" "
+        "--input-format PairedEndFastqManifestPhred33V2 > \"$logf\" 2>&1 </dev/null"
 
 
 # --- 01-03: primers, quality, denoising ----------------------------------------------------

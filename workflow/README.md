@@ -160,7 +160,7 @@ single broken mate, so both mates come from one source and stay in the same orde
 | File | Contents |
 |---|---|
 | `fastq/` | The read files, named as on ENA |
-| `manifest.tsv` | QIIME 2 `PairedEndFastqManifestPhred33V2` (or single-end), one row per run |
+| `manifest.tsv` | QIIME 2 `PairedEndFastqManifestPhred33V2` (or single-end), one row per run. Paths start with `$PWD`, so the download can be moved; import it from this directory |
 | `run_to_sample.tsv` | Run to BioSample map, usable as QIIME 2 metadata |
 | `sample_metadata.tsv` | One row per BioSample with all submitter attributes |
 | `runs.tsv`, `ena_filereport.tsv` | The selected runs, and ENA's raw answer |

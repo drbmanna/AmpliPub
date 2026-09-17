@@ -222,7 +222,7 @@ def test_biosample_attributes_parse():
     assert bs["SAMN03939374"]["biosample_title"] == "2009650"
 
 
-def test_manifest_one_row_per_run_absolute_paths(tmp_path):
+def test_manifest_one_row_per_run_pwd_paths(tmp_path):
     rows = rows_from("ena_baxter_subset.tsv")
     plan = {r["run_accession"]: fs.plan_files(r) for r in rows}
     path = tmp_path / "manifest.tsv"
@@ -231,7 +231,44 @@ def test_manifest_one_row_per_run_absolute_paths(tmp_path):
     assert table[0] == ["sample-id", "forward-absolute-filepath", "reverse-absolute-filepath"]
     assert [t[0] for t in table[1:]] == list(plan)
     assert {"SRR2143955", "SRR2143956"} <= {t[0] for t in table[1:]}  # resequenced sample
-    assert all(os.path.isabs(p) for t in table[1:] for p in t[1:])
+    first = plan[table[1][0]]
+    assert table[1][1:] == [f"$PWD/fastq/{f.name}" for f in first]
+
+
+def test_manifest_holds_no_machine_path(tmp_path):
+    """The whole point: nothing in the manifest names the directory it was written in."""
+    rows = rows_from("ena_baxter_subset.tsv")
+    plan = {r["run_accession"]: fs.plan_files(r) for r in rows}
+    path = tmp_path / "manifest.tsv"
+    fs.write_manifest(str(path), plan, "paired", str(tmp_path / "fastq"))
+    text = path.read_text()
+    assert str(tmp_path) not in text
+    assert tmp_path.name not in text
+
+
+def test_manifest_resolves_after_the_directory_moves(tmp_path):
+    rows = rows_from("ena_baxter_subset.tsv")
+    plan = {r["run_accession"]: fs.plan_files(r) for r in rows}
+    old = tmp_path / "old"
+    (old / "fastq").mkdir(parents=True)
+    for files in plan.values():
+        for f in files:
+            (old / "fastq" / f.name).write_text("x")
+    fs.write_manifest(str(old / "manifest.tsv"), plan, "paired", str(old / "fastq"))
+    new = tmp_path / "moved"
+    old.rename(new)
+    table = list(csv.reader((new / "manifest.tsv").open(), delimiter="\t"))
+    resolved = [p.replace("$PWD", str(new)) for t in table[1:] for p in t[1:]]
+    assert resolved and all(os.path.isfile(p) for p in resolved)
+
+
+def test_manifest_refuses_fastq_outside_its_directory(tmp_path):
+    rows = rows_from("ena_baxter_subset.tsv")
+    plan = {r["run_accession"]: fs.plan_files(r) for r in rows}
+    (tmp_path / "out").mkdir()
+    with pytest.raises(fs.FetchError, match="not inside"):
+        fs.write_manifest(str(tmp_path / "out" / "manifest.tsv"), plan, "paired",
+                          str(tmp_path / "elsewhere"))
 
 
 def test_sample_metadata_groups_runs_and_warns_missing(tmp_path, caplog):

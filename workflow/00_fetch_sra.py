@@ -28,6 +28,7 @@ import io
 import logging
 import os
 import platform
+import posixpath
 import re
 import shlex
 import shutil
@@ -500,11 +501,24 @@ MANIFEST_HEADER = {
 
 
 def write_manifest(path: str, plan: dict[str, list[ReadFile]], layout: str, fastq_dir: str) -> None:
+    """Paths are written as $PWD/<fastq dir>/<file>, relative to the manifest's directory.
+
+    An absolute path ties the download to the machine it was made on; moving it to another
+    machine or into a container broke the import (2026-09-17). QIIME 2 2025.7 rejects plain
+    relative paths ("must be absolute") but expands $PWD, so the manifest works from any
+    location as long as the import runs with the manifest's directory as the working
+    directory, which the Snakefile's import rule does.
+    """
+    rel = os.path.relpath(os.path.abspath(fastq_dir), os.path.dirname(os.path.abspath(path)))
+    if rel == os.pardir or rel.startswith(os.pardir + os.sep) or os.path.isabs(rel):
+        raise FetchError(f"{fastq_dir} is not inside the manifest's directory, "
+                         "so the manifest could not be moved with it")
     with open(path, "w", newline="") as fh:
         w = csv.writer(fh, delimiter="\t", lineterminator="\n")
         w.writerow(MANIFEST_HEADER[layout])
         for run, files in plan.items():
-            by_role = {f.role: os.path.abspath(os.path.join(fastq_dir, f.name)) for f in files}
+            by_role = {f.role: "$PWD/" + posixpath.join(*rel.split(os.sep), f.name)
+                       for f in files}
             if layout == "paired":
                 w.writerow([run, by_role["forward"], by_role["reverse"]])
             else:
@@ -659,11 +673,12 @@ def run(args) -> None:
         raise FetchError(f"manifest has {n_rows} rows for {len(rows)} runs")
     log.info("done: %d runs, %d files, %.2f GB. Verify with: cd %s && md5sum -c checksums.md5",
              len(rows), len(files), sum(f.size for f in files) / 1e9, shlex.quote(outdir))
-    log.info("import: qiime tools import --type 'SampleData[%s]' --input-format %s "
-             "--input-path %s --output-path demux.qza",
+    log.info("import (the manifest uses $PWD, so run it from %s): cd %s && qiime tools import "
+             "--type 'SampleData[%s]' --input-format %s --input-path manifest.tsv "
+             "--output-path demux.qza",
+             outdir, shlex.quote(outdir),
              "PairedEndSequencesWithQuality" if layout == "paired" else "SequencesWithQuality",
-             "PairedEndFastqManifestPhred33V2" if layout == "paired" else "SingleEndFastqManifestPhred33V2",
-             shlex.quote(manifest))
+             "PairedEndFastqManifestPhred33V2" if layout == "paired" else "SingleEndFastqManifestPhred33V2")
 
 
 def main(argv=None) -> int:
