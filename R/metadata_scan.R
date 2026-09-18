@@ -25,12 +25,30 @@
 #'   variables are screened for association with it.
 #' @param max_levels Above this many distinct values, a categorical variable is
 #'   treated as identifier-like rather than a grouping factor. Default `20`.
+#' @param force Scan even when `group` is a variable no test can use. See the
+#'   section below. Default `FALSE`.
+#'
+#' @section The grouping variable is checked before anything downstream runs:
+#' Naming a column that cannot group samples is the easiest mistake to make and
+#' the hardest to see afterwards, because every stage still runs and the report
+#' still renders, with confident sentences attached to a comparison that means
+#' nothing. The scan therefore refuses two cases outright:
+#'
+#' 1. **Constant.** One distinct value, so there is no second group to compare.
+#' 2. **Identifier-like.** Close to one distinct value per sample, which is a
+#'    sample or subject ID rather than a factor. Every group would have one
+#'    member.
+#'
+#' Two further cases warn but do not stop: more levels than `max_levels`, and a
+#' smallest level below three samples, where within-group variance cannot be
+#' estimated and the dispersion test is degenerate rather than merely weak.
+#' `force = TRUE` downgrades both refusals to warnings.
 #'
 #' @return An object of class `ap_metadata_scan`: a list with `variables` (one
 #'   row per variable), `batch_candidates`, `repeated_measures`,
-#'   `confounders`, and `group`.
+#'   `confounders`, `group`, `group_status` and `group_notes`.
 #' @export
-ap_scan_metadata <- function(x, group = NULL, max_levels = 20L) {
+ap_scan_metadata <- function(x, group = NULL, max_levels = 20L, force = FALSE) {
   meta <- ap_as_metadata_df(x)
   n <- nrow(meta)
   ap_assert(n > 0L, "Metadata has no rows.")
@@ -50,16 +68,101 @@ ap_scan_metadata <- function(x, group = NULL, max_levels = 20L) {
   repeated <- ap_find_repeated_measures(meta, vars, max_levels)
 
   confounders <- NULL
+  check <- list(status = NA_character_, notes = character(0))
   if (!is.null(group)) {
+    check <- ap_check_group_variable(vars, group, force)
     confounders <- ap_screen_confounders(meta, group, vars)
   }
 
   structure(
     list(variables = vars, batch_candidates = batch,
          repeated_measures = repeated, confounders = confounders,
-         group = group, n_samples = n),
+         group = group, group_status = check$status,
+         group_notes = check$notes, n_samples = n),
     class = "ap_metadata_scan"
   )
+}
+
+# The refusal cases are the two where no test is possible at all, not the ones
+# where a test is merely a bad idea. A design with 25 sites is unusual; a design
+# grouped by sample ID is arithmetic nonsense. Only the second kind stops the
+# run, so the guard does not block legitimate studies.
+#
+# Warnings are returned as well as raised. `ap_warn()` reaches the run log,
+# which nobody reads afterwards; the returned notes are printed by
+# `print.ap_metadata_scan()`, which is what the HTML report captures.
+#' @keywords internal
+ap_check_group_variable <- function(vars, group, force = FALSE) {
+  r <- vars[vars$variable == group, ]
+  usable <- vars$variable[vars$role %in% c("binary", "categorical") &
+                            vars$variable != group]
+  offer <- if (length(usable) > 0L) {
+    paste0("Variables that can group these samples: ", paste(usable, collapse = ", "), ".")
+  } else {
+    paste0("No other variable here has between 2 and max_levels levels, so this ",
+           "metadata may not describe a grouped design at all.")
+  }
+
+  fail <- function(status, headline, why) {
+    msg <- c(headline,
+             "i" = why,
+             "i" = offer,
+             "i" = "Pass `force = TRUE` to scan anyway.")
+    if (!force) ap_abort(msg)
+    ap_warn("`force = TRUE`: grouping variable `{group}` is {status}; downstream tests compare nothing meaningful.")
+    list(status = status, notes = paste0("Forced: grouping variable is ", status, "."))
+  }
+
+  if (identical(r$role, "constant")) {
+    return(fail(
+      "constant",
+      "Grouping variable `{group}` takes one value across every sample.",
+      paste0("A comparison needs two groups. Every test downstream would be run ",
+             "on a single group, and every p-value would be undefined.")
+    ))
+  }
+
+  if (identical(r$role, "identifier")) {
+    return(fail(
+      "identifier-like",
+      "Grouping variable `{group}` has {r$n_unique} distinct values, about one per sample.",
+      paste0("This is a sample or subject identifier, not a factor. Each group ",
+             "would hold a single sample, so any difference found would be noise. ",
+             "If these are subject IDs the design has repeated measures, which ",
+             "needs a mixed model rather than a group comparison.")
+    ))
+  }
+
+  notes <- character(0)
+  if (identical(r$role, "high-cardinality")) {
+    n_lev <- r$n_unique
+    ap_warn(c(
+      "Grouping variable `{group}` has {n_lev} levels.",
+      "i" = paste0("Tests will run, but with this many levels and few samples in ",
+                   "each, the result is rarely interpretable. Check this is the ",
+                   "comparison you meant.")
+    ))
+    notes <- c(notes, paste0(
+      "Grouping variable has ", n_lev, " levels. Tests ran, but with few samples ",
+      "per level the result is rarely interpretable."))
+  }
+
+  if (!is.na(r$smallest_level_n) && r$smallest_level_n < 3L) {
+    small <- r$smallest_level_n
+    ap_warn(c(
+      "The smallest level of `{group}` holds {small} sample{?s}.",
+      "i" = paste0("Below three samples the within-group variance cannot be ",
+                   "estimated, so betadisper and the dispersion test are ",
+                   "degenerate rather than merely underpowered. Do not report a ",
+                   "dispersion p-value from this design.")
+    ))
+    notes <- c(notes, paste0(
+      "The smallest level of the grouping variable holds ", small, " sample(s). ",
+      "Within-group variance cannot be estimated below three, so the dispersion ",
+      "test is degenerate and its p-value should not be reported."))
+  }
+
+  list(status = if (length(notes) == 0L) "ok" else "warned", notes = notes)
 }
 
 #' @keywords internal
@@ -91,8 +194,14 @@ ap_describe_variable <- function(v, name, n, max_levels) {
     if (n_unique == 2L) "binary" else "numeric"
   } else if (n_unique == 2L) {
     "binary"
+  } else if (n_unique >= n - n_missing) {
+    # Every observed value distinct. That is an identifier whatever `max_levels`
+    # says. Testing this against `max_levels` first, as an earlier version did,
+    # meant a per-sample ID in a study with fewer samples than `max_levels` was
+    # classified "categorical" and could be used as a grouping variable.
+    "identifier"
   } else if (n_unique > max_levels) {
-    if (n_unique >= n - n_missing) "identifier" else "high-cardinality"
+    "high-cardinality"
   } else {
     "categorical"
   }
@@ -194,6 +303,18 @@ print.ap_metadata_scan <- function(x, ...) {
     for (i in seq_len(nrow(usable))) {
       r <- usable[i, ]
       cli::cli_li("{.field {r$variable}}: {r$n_unique} level{?s}, smallest n = {r$smallest_level_n}{if (r$n_missing > 0) paste0(', ', r$n_missing, ' missing') else ''}")
+    }
+  }
+
+  if (!is.null(x$group)) {
+    g <- x$variables[x$variables$variable == x$group, ]
+    cli::cli_h2("Grouping variable")
+    cli::cli_text(
+      "{.field {x$group}}: {g$role}, {g$n_unique} level{?s}",
+      "{if (!is.na(g$smallest_level_n)) paste0(', smallest n = ', g$smallest_level_n) else ''}"
+    )
+    if (length(x$group_notes) > 0L) {
+      for (nt in x$group_notes) cli::cli_alert_warning(nt)
     }
   }
 

@@ -90,7 +90,9 @@ diversity:
   iterations: 100
 
 analysis:
-  group: my_group_column
+  group: my_group_column          # must name a column that can group samples:
+                                  # not constant, not one value per sample
+  force_group: false              # true: run even then. The report says it was forced
   explains_terms: []              # two or more terms to fit together in ap_explains()
   da_levels: []                   # e.g. [control, case]; empty keeps every level
   da_reference: null

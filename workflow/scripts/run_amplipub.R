@@ -113,7 +113,7 @@ write_tsv(cross, "rarefaction_crosscheck")
 # --- design -----------------------------------------------------------------------------------
 
 section("metadata scan")
-scan <- ap_scan_metadata(x, group = an$group)
+scan <- ap_scan_metadata(x, group = an$group, force = isTRUE(an$force_group))
 print(scan)
 write_tsv(scan$variables, "metadata_variables")
 if (!is.null(scan$confounders)) write_tsv(scan$confounders, "metadata_confounders")
@@ -128,6 +128,7 @@ alpha_test <- ap_alpha_test(alpha, an$group, seed = an$seed)
 print(alpha_test)
 write_tsv(alpha$values, "alpha_values")
 write_tsv(alpha_test$results, "alpha_tests")
+write_tsv(alpha_test$interpretation, "alpha_interpretation")
 try_plot(ap_plot_alpha(alpha, an$group, test = alpha_test), "alpha", width = 9, height = 6)
 
 # Repeated rarefaction of the unrarefied table, for comparison with the single subsample
@@ -147,12 +148,20 @@ print(permanova)
 write_tsv(permanova$results, "permanova")
 write_tsv(permanova$dispersion, "permanova_dispersion")
 write_tsv(permanova$interpretation, "permanova_interpretation")
+# The ordinations are kept, not discarded inside the loop. Their stress and
+# negative eigenvalue mass say whether the panels below can be read as a map,
+# and before 2026-09-18 that was computed and thrown away.
+ords <- list()
 for (m in beta$metrics) {
   ord <- ap_ordinate(beta, metric = m, seed = an$seed)
+  ords[[m]] <- ord
+  print(ord)
   try_plot(ap_plot_ordination(ord, group = an$group, permanova = permanova),
            paste0("ordination_", m))
   try_plot(ap_plot_dispersion(permanova, metric = m, term = an$group), paste0("dispersion_", m))
 }
+ordination_diagnostics <- ap_ordination_diagnostics(ords)
+write_tsv(ordination_diagnostics, "ordination_diagnostics")
 
 # --- composition --------------------------------------------------------------------------------
 
@@ -226,6 +235,7 @@ write_tsv(normalization$agreement, "normalization_agreement")
 section("provenance")
 saveRDS(list(scan = scan, depth = depth, alpha = alpha, alpha_test = alpha_test,
              alpha_repeated = alpha_repeated, beta = beta, permanova = permanova,
+             ordination_diagnostics = ordination_diagnostics,
              da = da, concordance = concordance, screen = screen, explains = explains,
              normalization = normalization, config = cfg),
         snakemake@output[["results"]])

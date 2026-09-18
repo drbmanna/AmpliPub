@@ -88,6 +88,127 @@ ap_axis_label <- function(ord, axis) {
   }
 }
 
+#' Diagnostics for one or more ordinations
+#'
+#' An ordination always produces a picture. Whether that picture can be read as
+#' a map is a separate question, and it is answered by the stress (NMDS) or by
+#' the negative eigenvalue mass and the variation on the first two axes (PCoA).
+#' Before 2026-09-18 these numbers were computed inside [ap_ordinate()] and
+#' discarded, so every report showed ordination panels with no indication of
+#' whether the projection was faithful.
+#'
+#' @param ords A single `ap_ordination` or a list of them.
+#'
+#' @return A data frame with one row per ordination: `metric`, `method`,
+#'   `n_samples`, `stress`, `converged`, `negative_eigenvalue_fraction`,
+#'   `axes_1_2_explained`, `verdict` and `interpretation`.
+#' @export
+ap_ordination_diagnostics <- function(ords) {
+  if (inherits(ords, "ap_ordination")) ords <- list(ords)
+  do.call(rbind, lapply(ords, ap_ordination_interpret))
+}
+
+# Thresholds. NMDS stress follows the conventional rule of thumb, below 0.1 a
+# good representation and above 0.2 one that should not be read as a map. The
+# 5% negative eigenvalue mass and the 20% on the first two axes are choices
+# recorded with the result, not standards: they mark the point where saying
+# "the groups sit apart in this plot" stops being supportable.
+#' @keywords internal
+ap_ordination_interpret <- function(x) {
+  base <- data.frame(
+    metric = x$metric, method = x$method, n_samples = x$n_samples,
+    stress = NA_real_, converged = NA,
+    negative_eigenvalue_fraction = NA_real_, axes_1_2_explained = NA_real_,
+    verdict = NA_character_, interpretation = NA_character_,
+    stringsAsFactors = FALSE
+  )
+
+  if (identical(x$method, "pcoa")) {
+    neg <- x$negative_eigenvalue_fraction
+    ax12 <- sum(x$prop_explained[1:2])
+    base$negative_eigenvalue_fraction <- neg
+    base$axes_1_2_explained <- ax12
+    distorted <- neg > 0.05
+    flat <- ax12 < 0.20
+
+    if (distorted && flat) {
+      base$verdict <- "distorted and low-variance"
+      base$interpretation <- sprintf(
+        paste0("%.1f%% of the eigenvalue mass is negative, so this distance is not ",
+               "Euclidean and the projection distorts it, and the first two axes carry ",
+               "only %.1f%% of the variation. Distances read off this plot are not ",
+               "reliable. Use the PERMANOVA result rather than the picture, and ",
+               "consider NMDS, which makes no Euclidean assumption."),
+        100 * neg, 100 * ax12)
+    } else if (distorted) {
+      base$verdict <- "distorted projection"
+      base$interpretation <- sprintf(
+        paste0("%.1f%% of the eigenvalue mass is negative. This distance is not ",
+               "Euclidean, so the projection distorts it. The first two axes carry ",
+               "%.1f%% of the variation. Consider NMDS, which makes no Euclidean ",
+               "assumption."),
+        100 * neg, 100 * ax12)
+    } else if (flat) {
+      base$verdict <- "low variance on the plotted axes"
+      base$interpretation <- sprintf(
+        paste0("The projection is close to Euclidean (%.1f%% negative eigenvalue mass), ",
+               "but the first two axes carry only %.1f%% of the variation. Most of the ",
+               "structure is in axes that are not plotted, so groups that look separated ",
+               "here may not be, and groups that overlap here may still differ."),
+        100 * neg, 100 * ax12)
+    } else {
+      base$verdict <- "readable"
+      base$interpretation <- sprintf(
+        paste0("The projection is close to Euclidean (%.1f%% negative eigenvalue mass) ",
+               "and the first two axes carry %.1f%% of the variation. Distances in this ",
+               "plot can be read as approximate distances in the full space."),
+        100 * neg, 100 * ax12)
+    }
+    return(base)
+  }
+
+  stress <- x$stress
+  converged <- isTRUE(x$converged)
+  base$stress <- stress
+  base$converged <- converged
+
+  if (is.na(stress)) {
+    base$verdict <- "not available"
+    base$interpretation <- "NMDS returned no stress value, so the fit cannot be judged."
+    return(base)
+  }
+
+  if (stress >= 0.2) {
+    base$verdict <- "too high to read as a map"
+    base$interpretation <- sprintf(
+      paste0("Stress is %.3f. Above 0.2 the ordination is not a faithful summary of the ",
+             "distances, so the arrangement of points should not be interpreted. Report ",
+             "the PERMANOVA and the distances, not this plot."),
+      stress)
+  } else if (stress >= 0.1) {
+    base$verdict <- "usable"
+    base$interpretation <- sprintf(
+      paste0("Stress is %.3f. Between 0.1 and 0.2 the map is usable for broad pattern ",
+             "but not for fine distinctions. Read large separations, not small ones."),
+      stress)
+  } else {
+    base$verdict <- "good"
+    base$interpretation <- sprintf(
+      paste0("Stress is %.3f. Below 0.1 the two-dimensional arrangement represents the ",
+             "distances well, so relative positions can be read directly."),
+      stress)
+  }
+
+  if (!converged) {
+    base$verdict <- paste0(base$verdict, ", did not converge")
+    base$interpretation <- paste0(
+      base$interpretation,
+      " NMDS did not converge within `trymax` attempts, so this solution may not be the ",
+      "best available. Raise `trymax` and rerun before reporting it.")
+  }
+  base
+}
+
 #' @export
 print.ap_ordination <- function(x, ...) {
   cli::cli_h1("Ordination: {toupper(x$method)} on {x$metric}")

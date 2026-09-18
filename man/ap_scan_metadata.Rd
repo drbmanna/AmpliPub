@@ -4,7 +4,7 @@
 \alias{ap_scan_metadata}
 \title{Assess sample metadata before choosing a test}
 \usage{
-ap_scan_metadata(x, group = NULL, max_levels = 20L)
+ap_scan_metadata(x, group = NULL, max_levels = 20L, force = FALSE)
 }
 \arguments{
 \item{x}{A \code{TreeSummarizedExperiment} built by \code{\link[=ap_import]{ap_import()}}, or a data frame.}
@@ -14,11 +14,14 @@ variables are screened for association with it.}
 
 \item{max_levels}{Above this many distinct values, a categorical variable is
 treated as identifier-like rather than a grouping factor. Default \code{20}.}
+
+\item{force}{Scan even when \code{group} is a variable no test can use. See the
+section below. Default \code{FALSE}.}
 }
 \value{
 An object of class \code{ap_metadata_scan}: a list with \code{variables} (one
 row per variable), \code{batch_candidates}, \code{repeated_measures},
-\code{confounders}, and \code{group}.
+\code{confounders}, \code{group}, \code{group_status} and \code{group_notes}.
 }
 \description{
 Classifies every metadata variable, flags likely batch or run proxies, looks
@@ -32,3 +35,22 @@ chi-squared test of independence for categorical ones. These are a screen,
 not an adjustment: a flagged variable is one to think about and report, not
 one to regress away automatically.
 }
+\section{The grouping variable is checked before anything downstream runs}{
+
+Naming a column that cannot group samples is the easiest mistake to make and
+the hardest to see afterwards, because every stage still runs and the report
+still renders, with confident sentences attached to a comparison that means
+nothing. The scan therefore refuses two cases outright:
+\enumerate{
+\item \strong{Constant.} One distinct value, so there is no second group to compare.
+\item \strong{Identifier-like.} Close to one distinct value per sample, which is a
+sample or subject ID rather than a factor. Every group would have one
+member.
+}
+
+Two further cases warn but do not stop: more levels than \code{max_levels}, and a
+smallest level below three samples, where within-group variance cannot be
+estimated and the dispersion test is degenerate rather than merely weak.
+\code{force = TRUE} downgrades both refusals to warnings.
+}
+

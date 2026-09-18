@@ -70,13 +70,91 @@ ap_alpha_test <- function(alpha,
   res$p_adj <- stats::p.adjust(res$p, method = "BH")
   rownames(res) <- NULL
 
-  structure(
+  out <- structure(
     list(results = res, group = group, covariates = covariates,
          subject = subject, seed = seed, n_boot = n_boot,
          n_groups = length(unique(meta[[group]][!is.na(meta[[group]])])),
          rarefied = alpha$rarefied, depth = alpha$depth),
     class = "ap_alpha_test"
   )
+  out$interpretation <- ap_alpha_test_interpret(out)
+  out
+}
+
+# Alpha diversity had no interpretation text at all until 2026-09-18. The report
+# showed a table of p-values and effect sizes and left the reader to decide what
+# they meant, which is the one thing this package is supposed to not do.
+#
+# The branches are exhaustive over the three facts available per metric: whether
+# the adjusted p clears alpha, whether the assumption check passed, and whether
+# a confidence interval was estimated. A non-significant result is never
+# reported as "no difference" without saying what the interval still allows.
+#' @keywords internal
+ap_alpha_test_interpret <- function(x, alpha = 0.05) {
+  r <- x$results
+  rows <- lapply(seq_len(nrow(r)), function(i) {
+    metric <- r$metric[i]
+    p_adj <- r$p_adj[i]
+    est <- r$estimate[i]
+    eff <- r$effect[i]
+    has_ci <- !is.na(r$ci_low[i])
+    ci <- if (has_ci) sprintf("[%.3f, %.3f]", r$ci_low[i], r$ci_high[i]) else NA_character_
+    assum <- r$assumptions_met[i]
+
+    mk <- function(verdict, text) {
+      data.frame(metric = metric, verdict = verdict, interpretation = text,
+                 stringsAsFactors = FALSE)
+    }
+
+    if (is.na(p_adj)) {
+      return(mk("not testable",
+                "No p-value was produced for this metric, so nothing can be concluded from it."))
+    }
+
+    sig <- p_adj < alpha
+
+    if (!sig) {
+      text <- sprintf(
+        paste0("No difference detected in %s (q = %s, %s = %.3f). "),
+        metric, format.pval(p_adj, digits = 2), eff, est)
+      text <- paste0(text, if (has_ci) {
+        sprintf(paste0("The 95%% interval %s is the set of effect sizes still consistent ",
+                       "with these data. This is absence of evidence, and the interval ",
+                       "says how much evidence there is: a wide interval does not rule ",
+                       "out a real difference."), ci)
+      } else {
+        paste0("No interval was estimated for this test, so the result says only that a ",
+               "difference was not detected, not that one is absent.")
+      })
+      return(mk("no difference detected", text))
+    }
+
+    text <- sprintf(
+      paste0("Groups differ in %s (q = %s, %s = %.3f%s). "),
+      metric, format.pval(p_adj, digits = 2), eff, est,
+      if (has_ci) paste0(", 95% CI ", ci) else "")
+
+    if (isFALSE(assum)) {
+      return(mk("difference, rank-based test", paste0(
+        text,
+        "The normality or equal-variance assumption failed, so a rank-based test was ",
+        "used. The result is a statement about ranks, not about means, and the effect ",
+        "size should be reported as such.")))
+    }
+
+    if (is.na(assum)) {
+      return(mk("difference", paste0(
+        text,
+        "Assumptions were not checked for this test. Read the effect size rather than ",
+        "the p-value: at this sample size a small p-value is cheap.")))
+    }
+
+    mk("difference", paste0(
+      text,
+      "Assumption checks passed. Read the effect size rather than the p-value: at this ",
+      "sample size a small p-value is cheap, and the effect size is what the claim rests on."))
+  })
+  do.call(rbind, rows)
 }
 
 #' @keywords internal
@@ -327,9 +405,12 @@ print.ap_alpha_test <- function(x, ...) {
       "rank-based test was used for {cli::qty(nrow(failed))}{?it/them}."
     ))
   }
-  cli::cli_text(
-    "Read the effect size first. At this sample size a small p-value is cheap; ",
-    "the effect size and its interval are what the result rests on."
-  )
+  if (!is.null(x$interpretation)) {
+    cli::cli_h2("Interpretation")
+    for (i in seq_len(nrow(x$interpretation))) {
+      it <- x$interpretation[i, ]
+      cli::cli_li("{.field {it$metric}}: {it$interpretation}")
+    }
+  }
   invisible(x)
 }

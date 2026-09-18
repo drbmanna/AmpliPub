@@ -13,6 +13,13 @@ params:
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+# The package must be attached, not merely installed. Without it the S3 print
+# methods do not dispatch, `print()` falls back to the default, and the sections
+# built from `show()` dump the raw list internals instead of the assessment.
+# That is what happened to every report produced before 2026-09-18.
+library(AmpliPub)
+# Plain ASCII, no ANSI colour: this output goes inside <pre> in the HTML.
+options(cli.num_colors = 1, cli.unicode = FALSE)
 res <- readRDS(params$results)
 out_dir <- dirname(params$results)
 # Figures are written into the HTML as base64 data by knitr::image_uri. Linking them with
@@ -29,7 +36,10 @@ fig <- function(name) {
   }
   invisible(NULL)
 }
-show <- function(obj) cat(paste(utils::capture.output(print(obj)), collapse = "\n"))
+# These print methods mix cli output (a condition, written to stderr) with base
+# print output (stdout), and knitr's `message = FALSE` discards the first before
+# a sink can see it. `ap_capture_print()` collects both in emission order.
+show <- function(obj) cat(paste(ap_capture_print(obj), collapse = "\n"))
 tbl <- function(df, digits = 4) knitr::kable(df, digits = digits, row.names = FALSE)
 ```
 
@@ -65,6 +75,15 @@ Computed on the rarefied table from `10_diversity` (depth `r res$depth`).
 tbl(res$alpha_test$results)
 ```
 
+```{r alpha-text, results = "asis"}
+if (!is.null(res$alpha_test$interpretation)) {
+  for (i in seq_len(nrow(res$alpha_test$interpretation))) {
+    r <- res$alpha_test$interpretation[i, ]
+    cat("- **", r$metric, "**: ", r$interpretation, "\n", sep = "")
+  }
+}
+```
+
 ```{r alpha-fig, results = "asis"}
 fig("alpha")
 ```
@@ -80,6 +99,29 @@ tbl(merge(res$permanova$results, res$permanova$interpretation[, c("metric", "ter
 for (i in seq_len(nrow(res$permanova$interpretation))) {
   r <- res$permanova$interpretation[i, ]
   cat("- **", r$metric, "**: ", r$interpretation, "\n", sep = "")
+}
+```
+
+## Can these plots be read as a map?
+
+An ordination always draws a picture. Whether distances in that picture reflect distances in
+the data is a separate question, answered by the stress for NMDS and by the negative
+eigenvalue mass and the variation on the plotted axes for PCoA.
+
+```{r ord-diag}
+if (!is.null(res$ordination_diagnostics)) {
+  tbl(res$ordination_diagnostics[, c("metric", "method", "stress",
+                                     "negative_eigenvalue_fraction",
+                                     "axes_1_2_explained", "verdict")])
+}
+```
+
+```{r ord-diag-text, results = "asis"}
+if (!is.null(res$ordination_diagnostics)) {
+  for (i in seq_len(nrow(res$ordination_diagnostics))) {
+    r <- res$ordination_diagnostics[i, ]
+    cat("- **", r$metric, "**: ", r$interpretation, "\n", sep = "")
+  }
 }
 ```
 
@@ -116,6 +158,10 @@ fig("da_effects")
 Hypothesis-generating. Ranked by variance explained adjusted for degrees of freedom, with one
 multiple-testing correction across every test run.
 
+A `verdict` of `-` means the row is not a beta-diversity test, so there is no dispersion
+result to qualify it. It does not mean the test was inconclusive. Read these as candidates to
+test properly, not as findings.
+
 ```{r screen}
 tbl(utils::head(res$screen$results[, c("rank", "variable", "family", "metric", "effect_name",
                                        "effect_adj", "p", "q", "stability", "verdict")], 30))
@@ -138,7 +184,16 @@ Whether each conclusion holds under every normalization compared.
 
 ```{r normalization}
 tbl(res$normalization$results)
-tbl(res$normalization$agreement)
+agr <- res$normalization$agreement
+tbl(agr[, setdiff(names(agr), "interpretation")])
+```
+
+```{r normalization-text, results = "asis"}
+if (!is.null(agr$interpretation)) {
+  for (i in seq_len(nrow(agr))) {
+    cat("- ", agr$interpretation[i], "\n", sep = "")
+  }
+}
 ```
 
 # Software

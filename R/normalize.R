@@ -157,12 +157,54 @@ ap_normalization_sensitivity <- function(x,
                same_verdict = length(unique(r$verdict)) == 1L,
                significant_under_all = all(r$p < 0.05),
                significant_under_any = any(r$p < 0.05),
+               interpretation = ap_normalization_interpret(r, tm),
                stringsAsFactors = FALSE)
   }))
 
   structure(list(results = results, agreement = agreement, methods = methods, terms = terms,
                  permutations = permutations, seed = seed, pseudocount = pseudocount),
             class = "ap_normalization_sensitivity")
+}
+
+# The point of running four normalizations is to find out whether the conclusion
+# survives the choice. That answer was previously left implicit in a table of
+# booleans. Branches are exhaustive over (any significant, all significant,
+# verdicts identical).
+#' @keywords internal
+ap_normalization_interpret <- function(r, term) {
+  any_sig <- any(r$p < 0.05)
+  all_sig <- all(r$p < 0.05)
+  same <- length(unique(r$verdict)) == 1L
+  n <- nrow(r)
+  methods <- paste(r$normalization, collapse = ", ")
+
+  if (!any_sig) {
+    return(sprintf(
+      paste0("`%s` is not significant under any of the %d normalizations tested (%s). The ",
+             "null result is stable, so it is not an artefact of the normalization choice."),
+      term, n, methods))
+  }
+  if (same && all_sig) {
+    return(sprintf(
+      paste0("`%s` is significant under all %d normalizations and they agree on the verdict ",
+             "(%s). The conclusion does not depend on the normalization choice, which is the ",
+             "strongest form this result can take."),
+      term, n, unique(r$verdict)))
+  }
+  if (all_sig) {
+    return(sprintf(
+      paste0("`%s` is significant under all %d normalizations, but they do not agree on what ",
+             "it means (%s). The difference is real; its interpretation depends on the ",
+             "normalization, so report the disagreement rather than one normalization's view."),
+      term, n, paste(sprintf("%s: %s", r$normalization, r$verdict), collapse = "; ")))
+  }
+  sig <- r$normalization[r$p < 0.05]
+  not <- r$normalization[!(r$p < 0.05)]
+  sprintf(
+    paste0("`%s` is significant under %s but not under %s. The result depends on the ",
+           "normalization, so it cannot be reported as a finding without saying which ",
+           "normalization produced it and that others did not."),
+    term, paste(sig, collapse = ", "), paste(not, collapse = ", "))
 }
 
 #' @export
@@ -184,6 +226,9 @@ print.ap_normalization_sensitivity <- function(x, ...) {
       cli::cli_alert_warning(
         "{.field {a$term}}: the verdict depends on the normalization. Report it that way."
       )
+    }
+    if (!is.null(a$interpretation) && !is.na(a$interpretation)) {
+      cli::cli_text("{a$interpretation}")
     }
   }
   invisible(x)

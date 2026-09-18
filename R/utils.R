@@ -21,6 +21,55 @@ ap_warn <- function(message, ..., .envir = parent.frame()) {
   cli::cli_warn(message, ..., .envir = .envir)
 }
 
+#' Capture everything a print method emits, in order
+#'
+#' The print methods in this package mix cli output, which is signalled as a
+#' condition and written to stderr, with base `print()` output, which goes to
+#' stdout. Neither stream alone is the whole story:
+#'
+#' * `utils::capture.output()` returns only the base parts. Inside knitr, where
+#'   `message = FALSE` discards message conditions before any sink sees them, it
+#'   returns nothing at all for a cli-only method. That is why every report
+#'   produced before 2026-09-18 showed raw list internals instead of the
+#'   formatted assessment.
+#' * `cli::cli_fmt()` returns only the cli parts, and returns them after the
+#'   base parts rather than interleaved, so tables end up separated from the
+#'   headings that introduce them.
+#'
+#' This redirects stdout to a buffer and writes each cli condition into that
+#' same buffer as it is signalled, so the two arrive in the order the method
+#' emitted them.
+#'
+#' @param obj Object to print.
+#' @return A character vector, one element per line.
+#' @export
+ap_capture_print <- function(obj) {
+  out <- character(0)
+  con <- textConnection("out", "w", local = TRUE)
+  sink(con)
+  on.exit({
+    if (sink.number() > 0L) sink()
+    if (isOpen(con)) close(con)
+  }, add = TRUE)
+
+  withCallingHandlers(
+    print(obj),
+    cliMessage = function(m) {
+      cat(conditionMessage(m))
+      invokeRestart("muffleMessage")
+    },
+    message = function(m) {
+      cat(conditionMessage(m))
+      invokeRestart("muffleMessage")
+    }
+  )
+
+  sink()
+  close(con)
+  on.exit()
+  out
+}
+
 # Some package calls emit a warning that is known and expected on amplicon data
 # every time they run. A warning that always fires teaches people to ignore
 # warnings, so exactly that message is silenced and every other one still shows.
