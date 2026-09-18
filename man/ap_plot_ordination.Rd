@@ -11,7 +11,9 @@ ap_plot_ordination(
   permanova = NULL,
   ellipse = TRUE,
   axes = c(1, 2),
-  point_size = 1.6
+  point_size = 1.6,
+  publication = FALSE,
+  pub = ap_pub_options()
 )
 }
 \arguments{
@@ -28,6 +30,14 @@ ap_plot_ordination(
 \item{axes}{Which two axes to plot. Default \code{c(1, 2)}.}
 
 \item{point_size}{Point size. Default \code{1.6}.}
+
+\item{publication}{Draw the publication version: no subtitle or caption,
+\code{\link[=ap_theme_pub]{ap_theme_pub()}}, ggsci colours, ellipses filled at low opacity, and the
+PERMANOVA and dispersion numbers on the panel without the verdict. The
+verdict, its explanation and the projection caveat go to the legend text
+from \code{\link[=ap_ordination_legend]{ap_ordination_legend()}}. Default \code{FALSE}.}
+
+\item{pub}{\code{\link[=ap_pub_options]{ap_pub_options()}} for \code{publication = TRUE}.}
 }
 \value{
 A ggplot object.

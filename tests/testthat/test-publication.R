@@ -136,3 +136,63 @@ test_that("the legend carries each metric's test, n, q and effect size", {
   expect_length(leg, 3)
   expect_match(leg[2], "^Hill q0 \\(observed richness\\): .+, n = \\d+, q = .+, .+ = -?[0-9.]+")
 })
+
+ord_fixture <- function() {
+  x <- ap_fixture_object(tree = FALSE, taxonomy = FALSE)
+  b <- ap_beta(x, metrics = "bray_curtis", rarefy = FALSE)
+  list(ord = ap_ordinate(b, "bray_curtis", method = "pcoa"),
+       pn = ap_permanova(b, "group", permutations = 99L, seed = 1L))
+}
+
+test_that("the publication ordination drops the verdict but keeps the numbers", {
+  skip_pub()
+  f <- ord_fixture()
+  p <- ap_plot_ordination(f$ord, group = "group", permanova = f$pn, publication = TRUE,
+                          pub = ap_pub_options(labels = list(group = "Arm")))
+  expect_null(p$labels$subtitle)
+  expect_null(p$labels$caption)
+  grobs <- lapply(Filter(function(l) inherits(l$geom, "GeomCustomAnn"), p$layers),
+                  function(l) l$geom_params$grob)
+  txt <- vapply(grobs, function(g) paste(deparse(g$label), collapse = ""), character(1))
+  expect_length(txt, 2)
+  expect_match(txt[1], "italic(R)^2", fixed = TRUE)
+  expect_match(txt[1], "italic(F)", fixed = TRUE)
+  expect_match(txt[2], "betadisper", fixed = TRUE)
+  # Baselines 2.8 mm apart, whatever each line's height.
+  ys <- vapply(grobs, function(g) grid::convertY(grid::unit(1, "npc") - g$y, "mm", valueOnly = TRUE),
+               numeric(1))
+  expect_equal(unname(diff(ys)), 2.8)
+  verdicts <- f$pn$interpretation$verdict
+  expect_false(any(vapply(verdicts, function(v) any(grepl(v, txt, ignore.case = TRUE)), logical(1))))
+  # Every line is a plotmath expression, so the PDF gets a real superscript.
+  expect_true(all(vapply(grobs, function(g) is.call(g$label), logical(1))))
+  # Ellipses: one filled polygon layer at low opacity, one outline.
+  polys <- Filter(function(l) inherits(l$geom, "GeomPolygon"), p$layers)
+  expect_length(polys, 1)
+  expect_lt(polys[[1]]$aes_params$alpha, 0.2)
+  expect_equal(p$scales$get_scales("colour")$name, "Arm")
+  expect_equal(p$scales$get_scales("fill")$name, "Arm")
+  size <- attr(p, "ap_pub_size")
+  expect_equal(size$width, "single")
+  expect_true(size$height >= 50 && size$height <= 247)
+  expect_equal(unname(vapply(grobs, function(g) g$gp$fontsize, numeric(1))), c(6, 6))
+  expect_silent(ggplot2::ggplot_build(p))
+})
+
+test_that("the ordination legend carries the verdict and its reasoning", {
+  f <- ord_fixture()
+  leg <- ap_ordination_legend(f$ord, f$pn, "group")
+  expect_match(leg[1], "^PCoA on bray_curtis")
+  expect_true(any(startsWith(leg, "PERMANOVA (99 permutations): R2 = ")))
+  expect_true(any(grepl(paste0("^Verdict: ", f$pn$interpretation$verdict[1]), leg)))
+})
+
+test_that("the panel statistics parse, including a missing dispersion test", {
+  pn <- list(results = data.frame(metric = "m", term = "t", R2 = 0.1, pseudo_F = 2, p = 0.001),
+             dispersion = data.frame(metric = "m", term = "t", dispersion_p = NA_real_))
+  lines <- ap_permanova_plotmath(pn, "m", "t")
+  expect_match(lines[1], "italic(p) == '0.001'", fixed = TRUE)
+  expect_equal(lines[2], "'betadisper:' ~ '-'")
+  for (t in lines) expect_silent(parse(text = t))
+  expect_null(ap_permanova_plotmath(pn, "m", "other"))
+})

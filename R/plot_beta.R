@@ -16,11 +16,18 @@
 #' @param ellipse Draw a 95% confidence ellipse per group. Default `TRUE`.
 #' @param axes Which two axes to plot. Default `c(1, 2)`.
 #' @param point_size Point size. Default `1.6`.
+#' @param publication Draw the publication version: no subtitle or caption,
+#'   [ap_theme_pub()], ggsci colours, ellipses filled at low opacity, and the
+#'   PERMANOVA and dispersion numbers on the panel without the verdict. The
+#'   verdict, its explanation and the projection caveat go to the legend text
+#'   from [ap_ordination_legend()]. Default `FALSE`.
+#' @param pub [ap_pub_options()] for `publication = TRUE`.
 #'
 #' @return A ggplot object.
 #' @export
 ap_plot_ordination <- function(ord, group = NULL, shape = NULL, permanova = NULL,
-                               ellipse = TRUE, axes = c(1, 2), point_size = 1.6) {
+                               ellipse = TRUE, axes = c(1, 2), point_size = 1.6,
+                               publication = FALSE, pub = ap_pub_options()) {
   ap_assert(inherits(ord, "ap_ordination"),
             "`ord` must come from `ap_ordinate()`, not {class(ord)[1]}.")
   ap_assert(length(axes) == 2L && all(axes <= ncol(ord$coords)),
@@ -40,6 +47,10 @@ ap_plot_ordination <- function(ord, group = NULL, shape = NULL, permanova = NULL
   if (!is.null(shape)) {
     ap_assert(shape %in% names(meta), "Variable `{shape}` is not in the sample metadata.")
     df$shp <- factor(as.character(meta[[shape]][match(df$sample_id, rownames(meta))]))
+  }
+
+  if (publication) {
+    return(ap_plot_ordination_pub(df, ord, group, permanova, ellipse, axes, pub))
   }
 
   aes_args <- list(x = quote(.data$x), y = quote(.data$y))
@@ -80,6 +91,120 @@ ap_plot_ordination <- function(ord, group = NULL, shape = NULL, permanova = NULL
     }
   }
   p
+}
+
+# The publication ordination. The statistics stay on the panel because a reader
+# looks for them there; the verdict moves to the legend text with its reasoning,
+# since a bare "confounded by dispersion" on a panel says too little to act on.
+#' @keywords internal
+ap_plot_ordination_pub <- function(df, ord, group, permanova, ellipse, axes, pub) {
+  ap_assert(inherits(pub, "ap_pub_options"), "`pub` must come from `ap_pub_options()`.")
+  if (is.null(group)) {
+    p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$x, y = .data$y)) +
+      ggplot2::geom_point(size = 0.9, alpha = 0.8, stroke = 0)
+  } else {
+    df$grp <- ap_pub_levels(df$grp, pub)
+    cols <- ap_pub_palette(nlevels(df$grp), pub$palette)
+    p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$x, y = .data$y,
+                                          colour = .data$grp, fill = .data$grp))
+    if (ellipse) {
+      p <- p +
+        ggplot2::stat_ellipse(geom = "polygon", level = 0.95, type = "t",
+                              alpha = 0.08, colour = NA) +
+        ggplot2::stat_ellipse(level = 0.95, type = "t", linewidth = 0.4)
+    }
+    p <- p +
+      ggplot2::geom_point(size = 0.9, alpha = 0.8, stroke = 0) +
+      ggplot2::scale_colour_manual(values = cols, name = ap_pub_label(group, pub)) +
+      ggplot2::scale_fill_manual(values = cols, name = ap_pub_label(group, pub))
+  }
+  p <- p +
+    ggplot2::labs(x = ap_axis_label(ord, axes[1]), y = ap_axis_label(ord, axes[2])) +
+    ggplot2::coord_fixed() +
+    ap_theme_pub(legend = "right")
+
+  if (!is.null(permanova) && !is.null(group)) {
+    lines <- ap_permanova_plotmath(permanova, ord$metric, group)
+    if (!is.null(lines)) {
+      p <- p + ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0.05, 0.25)))
+      # One grob per line, since plotmath has no line break. Each baseline sits a fixed
+      # 2.8 mm below the last; stepping by vjust instead spaces them by each line's own
+      # height, which the superscript makes uneven.
+      for (i in seq_along(lines)) {
+        grob <- grid::textGrob(
+          parse(text = lines[i])[[1]],
+          x = grid::unit(1.5, "mm"), y = grid::unit(1, "npc") - grid::unit(3 + 2.8 * (i - 1), "mm"),
+          hjust = 0, vjust = 0,
+          gp = grid::gpar(fontsize = ap_pub_stat_pt, fontfamily = "Arial", col = "black"))
+        p <- p + ggplot2::annotation_custom(grob)
+      }
+    }
+  }
+  attr(p, "ap_pub_size") <- ap_pub_ord_size(p)
+  p
+}
+
+# Size for a coord_fixed ordination: one column (Bharat, 2026-09-18), with a
+# height from the built panel's own x and y ranges (ellipses and headroom
+# included), so the fixed aspect does not leave the page empty. Measured on the
+# Baxter figure: the panel gets about 54 mm of the 89 mm width, and the x axis
+# and margins take about 15 mm of height.
+#' @keywords internal
+ap_pub_ord_size <- function(p) {
+  pp <- ggplot2::ggplot_build(p)$layout$panel_params[[1]]
+  h <- 54 * diff(pp$y.range) / diff(pp$x.range) + 15
+  list(width = "single", height = round(min(247, max(50, h))))
+}
+
+# In-panel statistics at 6 pt on two lines (Bharat's choice, 2026-09-18, after
+# seeing 7 pt on three): at one column the panel is about 54 mm wide, and the
+# PERMANOVA line needs about 64 mm at 7 pt. Nature allows 5 pt; Elsevier asks for
+# 7 pt text, with 6 pt only for sub- and superscripts.
+ap_pub_stat_pt <- 6
+
+# PERMANOVA and dispersion as two plotmath expressions, so R-squared is set with a
+# real superscript and the statistic symbols in italics.
+#' @keywords internal
+ap_permanova_plotmath <- function(pn, metric, term) {
+  r <- pn$results[pn$results$metric == metric & pn$results$term == term, ]
+  if (nrow(r) == 0L) return(NULL)
+  d <- pn$dispersion[pn$dispersion$metric == metric & pn$dispersion$term == term, ]
+  pv <- function(p) sprintf("italic(p) == '%s'", format.pval(p, digits = 2))
+  c(sprintf("'PERMANOVA:' ~ italic(R)^2 == '%.4f' * ',' ~ italic(F) == '%.2f' * ',' ~ %s",
+            r$R2[1], r$pseudo_F[1], pv(r$p[1])),
+    if (nrow(d) == 0L || is.na(d$dispersion_p[1])) "'betadisper:' ~ '-'"
+    else sprintf("'betadisper:' ~ %s", pv(d$dispersion_p[1])))
+}
+
+#' Legend text for a publication ordination
+#'
+#' What [ap_plot_ordination()] leaves off the publication panel: the method and
+#' variance explained, the projection caveat when there is one, and the
+#' PERMANOVA and dispersion results with the verdict and its explanation.
+#'
+#' @param ord An `ap_ordination` from [ap_ordinate()].
+#' @param permanova An `ap_permanova` result, or `NULL`.
+#' @param group The term tested.
+#' @return A character vector, one line per entry.
+#' @export
+ap_ordination_legend <- function(ord, permanova = NULL, group = NULL) {
+  out <- c(paste0(ap_ord_subtitle(ord), "."), ap_ord_caption(ord))
+  if (!is.null(permanova) && !is.null(group)) {
+    r <- permanova$results[permanova$results$metric == ord$metric &
+                             permanova$results$term == group, ]
+    v <- permanova$interpretation[permanova$interpretation$metric == ord$metric &
+                                    permanova$interpretation$term == group, ]
+    if (nrow(r) > 0L) {
+      out <- c(out, sprintf("PERMANOVA (%s permutations): R2 = %.4f, pseudo-F = %.2f, p = %s, adjusted p = %s.",
+                            format(permanova$permutations, big.mark = ","), r$R2[1],
+                            r$pseudo_F[1], format.pval(r$p[1], digits = 2),
+                            format.pval(r$p_adj[1], digits = 2)))
+    }
+    if (nrow(v) > 0L) {
+      out <- c(out, paste0("Verdict: ", v$verdict[1], ". ", v$interpretation[1]))
+    }
+  }
+  out
 }
 
 #' @keywords internal

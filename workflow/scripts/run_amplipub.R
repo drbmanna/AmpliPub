@@ -176,6 +176,9 @@ for (m in beta$metrics) {
   print(ord)
   try_plot(ap_plot_ordination(ord, group = an$group, permanova = permanova),
            paste0("ordination_", m))
+  try_pub(ap_plot_ordination(ord, group = an$group, permanova = permanova,
+                             publication = TRUE, pub = pub),
+          paste0("ordination_", m), legend = ap_ordination_legend(ord, permanova, an$group))
   try_plot(ap_plot_dispersion(permanova, metric = m, term = an$group), paste0("dispersion_", m))
 }
 ordination_diagnostics <- ap_ordination_diagnostics(ords)
