@@ -196,6 +196,10 @@ if (!is.null(agr$interpretation)) {
 }
 ```
 
+```{r guide, results = "asis"}
+cat(paste(ap_report_guide(res), collapse = "\n"))
+```
+
 # Software
 
 ```{r session, results = "asis"}
