@@ -55,3 +55,31 @@ jobs:
 
       - name: Run the workflow tests
         run: python -m pytest workflow/tests -q
+
+  # The job above has no Snakemake, so the dry-run and rulegraph tests in
+  # test_snakefile.py skip there. This job runs them against the Snakemake the workflow
+  # actually uses: versions from workflow/envs/amplipub-snakemake.lock (Python 3.12,
+  # snakemake-minimal 9.26.1, PyYAML 6.0.3, jsonschema 4.26.0). Snakemake 9 needs
+  # Python 3.11 or later, hence not in the matrix above.
+  snakefile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Install Snakemake and pytest
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install snakemake==9.26.1 PyYAML==6.0.3 jsonschema==4.26.0 pytest
+          snakemake --version
+
+      # A skip here would be a silent pass, so any skip fails the job.
+      - name: Run the Snakefile tests, refusing skips
+        run: |
+          python -m pytest workflow/tests/test_snakefile.py -q -rs | tee pytest.log
+          if grep -qi skipped pytest.log; then
+            echo "::error::a Snakefile test was skipped"; exit 1
+          fi
