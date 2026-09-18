@@ -354,7 +354,13 @@ LOCKS = {"qiime2": WF / "envs" / "amplipub-qiime2-2025.7.lock",
          "r": WF / "envs" / "amplipub-r.lock"}
 
 
+# Provenance describes the run that produced the results, so it runs after them. Before
+# 2026-09-18 it had no inputs, and a forced subset rerun in a copied run directory kept a
+# stale git_status.txt that claimed a clean tree. As an input, results.rds reruns this
+# rule on mtime alone, which needs no .snakemake metadata. (amplipub_analysis is defined
+# below, hence the path rather than rules.amplipub_analysis.)
 rule provenance_environments:
+    input: str(OUT / "amplipub" / "results.rds")
     output: str(OUT / "provenance" / "environments.done")
     log: str(LOGS / "provenance_environments.log")
     params:

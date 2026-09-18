@@ -121,3 +121,21 @@ def test_analysis_depends_on_installing_the_checkout(tmp_path):
     ids = dict(re.findall(r'^\s*(\d+)\[label = "(\w+)"', proc.stdout, re.M))
     edges = {(ids[a], ids[b]) for a, b in re.findall(r"^\s*(\d+) -> (\d+)", proc.stdout, re.M)}
     assert ("install_amplipub", "amplipub_analysis") in edges, sorted(edges)
+
+
+@pytest.mark.skipif(shutil.which("snakemake") is None, reason="Snakemake is not installed")
+def test_provenance_reruns_whenever_the_results_do(tmp_path):
+    """A forced subset rerun must not inherit a stale git_status.txt (2026-09-18)."""
+    cfg_path = tmp_path / "config.yaml"
+    with open(cfg_path, "w") as fh:
+        yaml.safe_dump(tiny_config(tmp_path), fh)
+    proc = subprocess.run(
+        ["snakemake", "-s", str(SNAKEFILE), "--configfile", str(cfg_path),
+         "--directory", str(tmp_path / "work"), "--forceall", "--rulegraph"],
+        capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    ids = dict(re.findall(r'^\s*(\d+)\[label = "(\w+)"', proc.stdout, re.M))
+    edges = {(ids[a], ids[b]) for a, b in re.findall(r"^\s*(\d+) -> (\d+)", proc.stdout, re.M)}
+    assert ("amplipub_analysis", "provenance_environments") in edges, sorted(edges)
+    assert ("provenance_environments", "report") in edges, sorted(edges)
