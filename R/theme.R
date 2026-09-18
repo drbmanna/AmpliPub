@@ -93,3 +93,142 @@ ap_scale_fill_taxa <- function(levels, ...) {
   if ("Other" %in% levels) values <- c(values, Other = "#D9D9D9")
   ggplot2::scale_fill_manual(values = values, breaks = levels, ...)
 }
+
+# Publication figures ----------------------------------------------------------------
+#
+# The report figures above carry their statistics and caveats on the panel. The
+# publication set does not: journals want the numbers in the figure legend, so
+# every publication figure is saved with a `_legend.txt` holding what was taken
+# off the panel (see ap_save_figure()). Sizes are for the figure drawn at its
+# final printed width, so 7 pt here is 7 pt on paper.
+
+ap_pub_require <- function(pkg) {
+  ap_assert(requireNamespace(pkg, quietly = TRUE),
+            "Publication figures need the {pkg} package. Install it, or use the report figures.")
+}
+
+#' Publication figure theme
+#'
+#' [ggpubr::theme_pubr()] sized for a figure drawn at its final printed width:
+#' 7 pt text, 8 pt axis titles, heavier axis lines and ticks, and no title,
+#' subtitle or caption. The font defaults to Arial. Where Arial is not
+#' installed, fontconfig substitutes a metric-compatible font such as
+#' Liberation Sans, so the layout is the same.
+#'
+#' @param base_size Text size in points. Default `7`, the smallest size Elsevier
+#'   accepts in print and the largest Nature allows for non-label text.
+#' @param base_family Font family. Default `"Arial"`.
+#' @param legend Legend position. Default `"none"`.
+#' @return A ggplot2 theme.
+#' @export
+ap_theme_pub <- function(base_size = 7, base_family = "Arial", legend = "none") {
+  ap_pub_require("ggpubr")
+  ggpubr::theme_pubr(base_size = base_size, base_family = base_family, legend = legend) +
+    ggplot2::theme(
+      text = ggplot2::element_text(colour = "black"),
+      axis.text = ggplot2::element_text(size = base_size, colour = "black"),
+      axis.title = ggplot2::element_text(size = base_size + 1, colour = "black"),
+      axis.line = ggplot2::element_line(linewidth = 0.3, colour = "black"),
+      axis.ticks = ggplot2::element_line(linewidth = 0.3, colour = "black"),
+      axis.ticks.length = ggplot2::unit(1.2, "mm"),
+      # Facets put their label on the left, outside the axis, where it reads as that
+      # panel's y-axis title (see ap_pub_facet()).
+      strip.background = ggplot2::element_blank(),
+      strip.placement = "outside",
+      strip.text = ggplot2::element_text(size = base_size + 1, colour = "black",
+                                         margin = ggplot2::margin(1, 1, 3, 1)),
+      strip.text.y.left = ggplot2::element_text(size = base_size + 1, colour = "black",
+                                                angle = 90, margin = ggplot2::margin(0, 2, 0, 0)),
+      legend.text = ggplot2::element_text(size = base_size),
+      legend.title = ggplot2::element_text(size = base_size),
+      panel.spacing = ggplot2::unit(3, "mm"),
+      plot.title = ggplot2::element_blank(),
+      plot.subtitle = ggplot2::element_blank(),
+      plot.caption = ggplot2::element_blank(),
+      plot.margin = ggplot2::margin(2, 3, 2, 2, unit = "mm")
+    )
+}
+
+#' Publication colour palette
+#'
+#' A [ggsci](https://CRAN.R-project.org/package=ggsci) journal palette. These
+#' copy journal house styles and were not designed for colour vision
+#' deficiency, unlike the Okabe-Ito palette the report figures use; check the
+#' palette you choose against your group count.
+#'
+#' @param n Number of colours.
+#' @param name ggsci palette: `"npg"` (default), `"lancet"`, `"nejm"`, `"jco"`
+#'   or `"aaas"`.
+#' @return A character vector of `n` hex colours.
+#' @export
+ap_pub_palette <- function(n, name = c("npg", "lancet", "nejm", "jco", "aaas")) {
+  name <- match.arg(name)
+  ap_pub_require("ggsci")
+  pal <- getExportedValue("ggsci", paste0("pal_", name))()
+  # Asking for more colours than a ggsci palette has returns NA with a warning.
+  max_n <- sum(!is.na(suppressWarnings(pal(100))))
+  ap_assert(n <= max_n,
+            "The {name} palette has {max_n} colours; {n} groups need more. Choose another palette.")
+  pal(n)
+}
+
+#' Options for publication figures
+#'
+#' The choices that differ between studies, collected once and passed to every
+#' `ap_plot_*(publication = TRUE)` call. In the workflow they come from the
+#' `publication:` block of the config. Everything else (column widths, font,
+#' text sizes) is fixed by journal rules and is not an option.
+#'
+#' @param palette ggsci palette, see [ap_pub_palette()]. Default `"npg"`.
+#' @param labels Named list mapping metadata variables to axis titles, e.g.
+#'   `list(dx = "Diagnosis")`. A variable not listed is shown by its name.
+#' @param capitalize_levels Capitalize the first letter of group levels on the
+#'   axis ("adenoma" becomes "Adenoma"). Default `TRUE`.
+#' @return An `ap_pub_options` list.
+#' @export
+ap_pub_options <- function(palette = "npg", labels = list(), capitalize_levels = TRUE) {
+  palette <- match.arg(palette, c("npg", "lancet", "nejm", "jco", "aaas"))
+  ap_assert(is.list(labels) && (length(labels) == 0L || !is.null(names(labels))),
+            "`labels` must be a named list, e.g. list(dx = \"Diagnosis\").")
+  ap_assert(isTRUE(capitalize_levels) || isFALSE(capitalize_levels),
+            "`capitalize_levels` must be TRUE or FALSE.")
+  structure(list(palette = palette, labels = labels, capitalize_levels = capitalize_levels),
+            class = "ap_pub_options")
+}
+
+#' @keywords internal
+ap_pub_label <- function(var, pub) {
+  lab <- pub$labels[[var]]
+  if (is.null(lab)) var else as.character(lab)
+}
+
+#' @keywords internal
+ap_pub_levels <- function(f, pub) {
+  f <- as.factor(f)
+  if (isTRUE(pub$capitalize_levels)) {
+    lv <- levels(f)
+    levels(f) <- paste0(toupper(substr(lv, 1, 1)), substring(lv, 2))
+  }
+  f
+}
+
+# Panel grid for a multi-panel figure: one row up to three panels, then two
+# columns for four, three columns beyond. Each row is 60 mm tall. The size is
+# attached to the plot so ap_save_figure() saves it at the size it was laid out for.
+#' @keywords internal
+ap_pub_layout <- function(n) {
+  ncol <- if (n <= 3L) n else if (n == 4L) 2L else 3L
+  nrow <- ceiling(n / ncol)
+  list(ncol = ncol, nrow = nrow,
+       width = if (n == 1L) "single" else "double",
+       height = min(247, nrow * 60))
+}
+
+# facet_wrap with each panel's label as its y-axis title.
+#' @keywords internal
+ap_pub_facet <- function(facet, n) {
+  lay <- ap_pub_layout(n)
+  list(ggplot2::facet_wrap(stats::as.formula(paste("~", facet)), ncol = lay$ncol,
+                           scales = "free_y", strip.position = "left"),
+       lay)
+}

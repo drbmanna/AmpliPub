@@ -223,3 +223,11 @@ ap_read_q2_ordination <- function(file) {
 
   list(vectors = coords, eigvals = eigvals, prop_explained = prop)
 }
+
+# The single depth every sample shares, or NA when depths differ. `%||%` in the
+# callers keeps objects saved before this field existed readable.
+#' @keywords internal
+ap_common_depth <- function(depths) {
+  depths <- unique(as.numeric(depths))
+  if (length(depths) == 1L) depths else NA_real_
+}

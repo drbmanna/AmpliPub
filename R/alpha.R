@@ -152,6 +152,10 @@ ap_alpha <- function(x,
          metrics = metrics,
          rarefied = rarefy,
          depth = if (rarefy) depth else NA_real_,
+         # A table rarefied before ap_alpha() (by QIIME 2, or by the workflow in R) comes
+         # in with rarefy = FALSE but every sample at one depth. Recording that stops the
+         # caption from calling it unrarefied (found 2026-09-18).
+         common_depth = ap_common_depth(if (rarefy) depth else depths),
          n_iter = n_iter,
          seed = if (rarefy) seed else NA_integer_,
          dropped = dropped,

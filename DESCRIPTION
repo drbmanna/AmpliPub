@@ -41,7 +41,11 @@ Imports:
     utils,
     vegan
 Suggests:
+    ggpubr,
     ggrepel,
+    ggsci,
+    ragg,
+    svglite,
     ALDEx2,
     ANCOMBC,
     Maaslin2,

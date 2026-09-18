@@ -12,7 +12,9 @@ ap_plot_alpha(
   points = TRUE,
   metrics = NULL,
   annotate = TRUE,
-  ncol = NULL
+  ncol = NULL,
+  publication = FALSE,
+  pub = ap_pub_options()
 )
 }
 \arguments{
@@ -32,6 +34,15 @@ ap_plot_alpha(
 \item{annotate}{Write the test result onto each panel. Default \code{TRUE}.}
 
 \item{ncol}{Facet columns. \code{NULL} lets ggplot2 decide.}
+
+\item{publication}{Draw the publication version: no caption and no
+statistics on the panels, \code{\link[=ap_theme_pub]{ap_theme_pub()}}, a ggsci palette, each metric's
+name as its panel's y-axis title, and a panel grid chosen from the number
+of metrics. The statistics and the caveat go to the legend text from
+\code{\link[=ap_alpha_legend]{ap_alpha_legend()}}. Default \code{FALSE}.}
+
+\item{pub}{\code{\link[=ap_pub_options]{ap_pub_options()}} for \code{publication = TRUE}: palette, axis
+titles for metadata variables, and level capitalization.}
 }
 \value{
 A ggplot object.

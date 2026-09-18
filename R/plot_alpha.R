@@ -17,6 +17,13 @@
 #' @param metrics Metrics to include. Defaults to everything in `alpha`.
 #' @param annotate Write the test result onto each panel. Default `TRUE`.
 #' @param ncol Facet columns. `NULL` lets ggplot2 decide.
+#' @param publication Draw the publication version: no caption and no
+#'   statistics on the panels, [ap_theme_pub()], a ggsci palette, each metric's
+#'   name as its panel's y-axis title, and a panel grid chosen from the number
+#'   of metrics. The statistics and the caveat go to the legend text from
+#'   [ap_alpha_legend()]. Default `FALSE`.
+#' @param pub [ap_pub_options()] for `publication = TRUE`: palette, axis
+#'   titles for metadata variables, and level capitalization.
 #'
 #' @return A ggplot object.
 #' @export
@@ -27,7 +34,9 @@ ap_plot_alpha <- function(alpha,
                           points = TRUE,
                           metrics = NULL,
                           annotate = TRUE,
-                          ncol = NULL) {
+                          ncol = NULL,
+                          publication = FALSE,
+                          pub = ap_pub_options()) {
   ap_assert(inherits(alpha, "ap_alpha"),
             "`alpha` must come from `ap_alpha()`, not {class(alpha)[1]}.")
   type <- match.arg(type)
@@ -43,6 +52,8 @@ ap_plot_alpha <- function(alpha,
 
   df$grp <- factor(as.character(df$grp))
   df$metric <- factor(df$metric, levels = metrics, labels = ap_metric_label(metrics))
+
+  if (publication) return(ap_plot_alpha_pub(df, type, points, pub, group))
 
   if (annotate && is.null(test)) {
     test <- tryCatch(ap_alpha_test(alpha, group, metrics = metrics),
@@ -94,6 +105,64 @@ ap_plot_alpha <- function(alpha,
   p
 }
 
+# The publication version. Boxes are filled opaque: with a translucent fill the
+# whisker segment ggplot2 draws behind the box shows through as a line across it.
+#' @keywords internal
+ap_plot_alpha_pub <- function(df, type, points, pub, group) {
+  ap_assert(inherits(pub, "ap_pub_options"), "`pub` must come from `ap_pub_options()`.")
+  df$grp <- ap_pub_levels(df$grp, pub)
+  n_grp <- nlevels(df$grp)
+  facet <- ap_pub_facet("metric", nlevels(droplevels(df$metric)))
+  p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$grp, y = .data$value, fill = .data$grp))
+  if (type == "violin") {
+    p <- p +
+      ggplot2::geom_violin(linewidth = 0.3, colour = "black", scale = "width", trim = TRUE) +
+      ggplot2::geom_boxplot(width = 0.14, outlier.shape = NA, fill = "white", linewidth = 0.3)
+  } else {
+    p <- p +
+      ggplot2::stat_boxplot(geom = "errorbar", width = 0.25, linewidth = 0.3) +
+      ggplot2::geom_boxplot(linewidth = 0.3, colour = "black", width = 0.6,
+                            outlier.shape = if (points) NA else 19, outlier.size = 0.5)
+  }
+  if (points) {
+    p <- p + ggplot2::geom_jitter(width = 0.15, height = 0, size = 0.6, alpha = 0.5,
+                                  colour = "black", stroke = 0)
+  }
+  p <- p +
+    facet[[1]] +
+    ggplot2::scale_fill_manual(values = ap_pub_palette(n_grp, pub$palette), guide = "none") +
+    ggplot2::labs(x = ap_pub_label(group, pub), y = NULL) +
+    ap_theme_pub()
+  attr(p, "ap_pub_size") <- facet[[2]][c("width", "height")]
+  p
+}
+
+#' Legend text for a publication alpha-diversity figure
+#'
+#' Everything [ap_plot_alpha()] writes on the report figure and leaves off the
+#' publication figure: the rarefaction statement or the caveat that the data
+#' were not rarefied, and for each metric the test, n, adjusted p and effect
+#' size with its interval. Written next to the figure by [ap_save_figure()].
+#'
+#' @param alpha An `ap_alpha` object.
+#' @param test An `ap_alpha_test` result, or `NULL`.
+#' @return A character vector, one line per entry.
+#' @export
+ap_alpha_legend <- function(alpha, test = NULL) {
+  out <- ap_alpha_caption(alpha)
+  if (!is.null(test)) {
+    r <- test$results
+    out <- c(out, vapply(seq_len(nrow(r)), function(i) {
+      sprintf("%s: %s, n = %d, q = %s, %s = %.3f%s.",
+              gsub("\n", " ", ap_metric_label(r$metric[i])), r$test[i], r$n[i],
+              format.pval(r$p_adj[i], digits = 2), r$effect[i], r$estimate[i],
+              if (is.na(r$ci_low[i])) "" else
+                sprintf(" (95%% CI %.3f to %.3f)", r$ci_low[i], r$ci_high[i]))
+    }, character(1)))
+  }
+  out
+}
+
 #' @keywords internal
 ap_alpha_caption <- function(alpha) {
   if (isTRUE(alpha$rarefied)) {
@@ -101,6 +170,9 @@ ap_alpha_caption <- function(alpha) {
            alpha$n_iter, " iterations averaged, seed ", alpha$seed, ".",
            if (length(alpha$dropped) > 0L)
              paste0(" ", length(alpha$dropped), " sample(s) below depth excluded.") else "")
+  } else if (!is.na(alpha$common_depth %||% NA_real_)) {
+    paste0("All samples at a common depth of ", format(alpha$common_depth, big.mark = ","),
+           " reads; not rarefied again here.")
   } else {
     "Not rarefied; richness is not comparable across unequal library sizes."
   }

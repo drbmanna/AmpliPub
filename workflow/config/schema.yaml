@@ -175,6 +175,21 @@ properties:
       alpha_rarefy_iterations: {type: integer, minimum: 1, default: 100}
     required: [group, explains_terms, da_levels, da_reference, da_methods, normalizations,
                seed, permutations, n_resample, alpha_rarefy_iterations]
+  publication:
+    type: object
+    description: Per-study choices for the publication figures. Optional; defaults apply.
+    properties:
+      palette:
+        type: string
+        enum: ["npg", "lancet", "nejm", "jco", "aaas"]
+        default: npg
+      labels:
+        type: object
+        additionalProperties: {type: string}
+        default: {}
+        description: "Axis titles for metadata variables, e.g. {dx: Diagnosis}."
+      capitalize_levels: {type: boolean, default: true}
+    additionalProperties: false
 
 required: [outdir, envs, threads, fetch, qc, references, classifier, primers, quality, dada2,
            mock, resolution, collapse, filter, diversity, analysis]

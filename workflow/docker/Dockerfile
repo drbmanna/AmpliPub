@@ -7,13 +7,21 @@
 # and the recorded commit is the checkout that ran.
 #
 # Build from the repository root:
-#   docker build -f workflow/docker/Dockerfile -t amplipub-workflow:2025.7-lock1 workflow/envs
+#   docker build -f workflow/docker/Dockerfile -t amplipub-workflow:2025.7-lock2 workflow/envs
 #
 # Run as the calling user. The AmpliPub R library is left writable because rule
 # install_amplipub installs the mounted checkout into it on every run; the change lives
 # only as long as the container.
 
 FROM quay.io/qiime2/amplicon:2025.7
+
+# Liberation Sans for the publication figures. It has Arial's metrics, and its fontconfig
+# aliases resolve "Arial" to it, so figures laid out for Arial are laid out identically.
+# Arial itself is proprietary and cannot ship in this image. SIL Open Font License.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends fonts-liberation=1:1.07.4-11; \
+    rm -rf /var/lib/apt/lists/*
 
 COPY amplipub-qiime2-2025.7.lock amplipub-qc.lock amplipub-snakemake.lock amplipub-r.lock /opt/locks/
 

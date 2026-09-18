@@ -25,6 +25,13 @@ out_dir <- dirname(snakemake@output[["results"]])
 dir_tables <- file.path(out_dir, "tables")
 dir_figures <- file.path(out_dir, "figures")
 dir_prov <- file.path(out_dir, "provenance")
+# Publication figures: no titles or statistics on the panel, journal widths, PDF + SVG +
+# PNG, with the statistics and caveats in <name>_legend.txt. The report figures above are
+# unchanged. Added one figure at a time as each is reviewed (2026-09-18).
+dir_pub <- file.path(out_dir, "figures_publication")
+pc <- cfg$publication %||% list()
+pub <- ap_pub_options(palette = pc$palette %||% "npg", labels = pc$labels %||% list(),
+                      capitalize_levels = pc$capitalize_levels %||% TRUE)
 for (d in c(dir_tables, dir_figures, dir_prov)) dir.create(d, recursive = TRUE, showWarnings = FALSE)
 
 started <- Sys.time()
@@ -46,6 +53,15 @@ try_plot <- function(expr, name, ...) {
     NULL
   })
   if (!is.null(p)) save_plot(p, name, ...)
+  invisible(p)
+}
+# Like try_plot(): a publication figure that cannot be drawn is logged, not fatal.
+try_pub <- function(expr, name, legend = NULL) {
+  p <- tryCatch(expr, error = function(e) {
+    message("publication figure ", name, " not drawn: ", conditionMessage(e))
+    NULL
+  })
+  if (!is.null(p)) ap_save_figure(p, name, dir_pub, legend = legend)
   invisible(p)
 }
 section <- function(title) cat("\n==================== ", title, " ====================\n", sep = "")
@@ -130,6 +146,8 @@ write_tsv(alpha$values, "alpha_values")
 write_tsv(alpha_test$results, "alpha_tests")
 write_tsv(alpha_test$interpretation, "alpha_interpretation")
 try_plot(ap_plot_alpha(alpha, an$group, test = alpha_test), "alpha", width = 9, height = 6)
+try_pub(ap_plot_alpha(alpha, an$group, publication = TRUE, pub = pub), "alpha",
+        legend = ap_alpha_legend(alpha, alpha_test))
 
 # Repeated rarefaction of the unrarefied table, for comparison with the single subsample
 # QIIME 2 draws. Reported alongside, not substituted.

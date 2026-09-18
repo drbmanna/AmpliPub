@@ -59,6 +59,9 @@ def test_the_schema_is_written_in_the_dialect_snakemake_validates_with():
     (lambda c: c["references"]["metadata"].pop("path"), "url"),
     (lambda c: c["analysis"].update(normalizations=["tss", "vst"]), "vst"),
     (lambda c: c["threads"].update(dada2=0), "minimum"),
+    (lambda c: c["publication"].update(palette="rainbow"), "rainbow"),
+    (lambda c: c["publication"].update(labels={"dx": 3}), "not of type"),
+    (lambda c: c["publication"].update(font="Comic Sans"), "font"),
 ])
 def test_broken_configs_are_refused(breakage, message):
     cfg = copy.deepcopy(load(TEMPLATE))

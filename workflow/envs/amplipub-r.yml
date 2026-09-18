@@ -36,6 +36,11 @@ dependencies:
   - r-ggplot2=4.0.3
   - r-scales=1.4.0
   - r-ggrepel=0.9.8
+  # Publication figures (added 2026-09-18; the solver added only r-ggsignif 0.6.4 and
+  # r-polynom 1.4_1 alongside, and changed nothing already pinned).
+  - r-ggpubr=1.0.0
+  - r-ggsci=5.2.0
+  - r-svglite=2.2.2
   - r-microbiomestat=1.4
   - r-lme4=2.0_6
   - r-rstatix=1.1.0

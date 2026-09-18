@@ -117,6 +117,7 @@ ap_beta <- function(x,
          metrics = metrics,
          rarefied = rarefy,
          depth = if (rarefy) depth else NA_real_,
+         common_depth = ap_common_depth(colSums(counts)),
          seed = if (rarefy) seed else NA_integer_,
          dropped = dropped,
          pseudocount = pseudocount,
@@ -202,6 +203,8 @@ print.ap_beta <- function(x, ...) {
   cli::cli_text("{x$n_samples} samples, {length(x$metrics)} metric{?s}")
   if (x$rarefied) {
     cli::cli_text("Rarefied to {format(x$depth, big.mark = ',')} reads, seed {x$seed}")
+  } else if (!is.na(x$common_depth %||% NA_real_)) {
+    cli::cli_text("All samples at a common depth of {format(x$common_depth, big.mark = ',')} reads")
   } else {
     cli::cli_alert_warning("Not rarefied. Bray-Curtis and Jaccard track library size.")
   }

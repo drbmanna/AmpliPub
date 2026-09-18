@@ -102,3 +102,11 @@ analysis:
   permutations: 999
   n_resample: 100
   alpha_rarefy_iterations: 100
+
+# Publication figures (amplipub/figures_publication/). Column widths, the font (Arial)
+# and text sizes follow journal rules and are fixed; these are the per-study choices.
+publication:
+  palette: npg                    # ggsci palette: npg, lancet, nejm, jco or aaas
+  labels:                         # axis titles for metadata variables; unlisted ones
+    my_group_column: My group     # are shown by their column name
+  capitalize_levels: true         # "adenoma" -> "Adenoma" on the axis

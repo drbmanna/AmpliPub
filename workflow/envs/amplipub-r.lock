@@ -1,7 +1,7 @@
 # This file may be used to create an environment using:
 # $ conda create --name <env> --file <this file>
 # platform: linux-64
-# created-by: conda 25.7.0
+# created-by: conda 25.3.1
 @EXPLICIT
 https://conda.anaconda.org/conda-forge/noarch/_r-mutex-1.0.1-anacondar_1.tar.bz2#19f9db5f4f1b7f5ef5f6d67207f25f38
 https://conda.anaconda.org/conda-forge/noarch/ca-certificates-2026.7.22-hbd8a1cb_0.conda#0f51e2391ade309db462a55611263e9c
@@ -201,6 +201,7 @@ https://conda.anaconda.org/conda-forge/noarch/r-pixmap-0.4_14-r45hc72bb7e_1.cond
 https://conda.anaconda.org/conda-forge/noarch/r-pkgconfig-2.0.3-r45hc72bb7e_5.conda#40a5fdd06c7e7880758a021cf2df6c12
 https://conda.anaconda.org/conda-forge/noarch/r-pls-2.9_0-r45hc72bb7e_0.conda#f5cec45e07c616b9c9e0cca6574fc9da
 https://conda.anaconda.org/conda-forge/linux-64/r-png-0.1_9-r45haf2892b_0.conda#9d3a0fd2c5ff1c247ad48dbc4974449c
+https://conda.anaconda.org/conda-forge/noarch/r-polynom-1.4_1-r45hc72bb7e_4.conda#78ee7eaaa8d5ae9aeb7f39ecfb3b000c
 https://conda.anaconda.org/conda-forge/noarch/r-praise-1.0.0-r45hc72bb7e_1009.conda#d9f7dfa06871712aaf768674dea06a0b
 https://conda.anaconda.org/conda-forge/linux-64/r-proxy-0.4_29-r45h54b55ab_0.conda#3cd143bab3297c33eaf8b11a47d1c6f9
 https://conda.anaconda.org/conda-forge/linux-64/r-ps-1.9.3-r45h54b55ab_0.conda#d4c22257df8cca28d50e604110e68e90
@@ -429,6 +430,8 @@ https://conda.anaconda.org/conda-forge/linux-64/r-gert-2.4.1-r45h7df5fc1_0.conda
 https://conda.anaconda.org/conda-forge/noarch/r-ggbeeswarm-0.7.3-r45hc72bb7e_0.conda#9be31d2adf526d3c38b78a05333ddf30
 https://conda.anaconda.org/conda-forge/noarch/r-ggnewscale-0.5.2-r45hc72bb7e_1.conda#7c5e38175877151e5fd6aabf157e0759
 https://conda.anaconda.org/conda-forge/linux-64/r-ggrepel-0.9.8-r45h3697838_0.conda#b37e2dec24df6612c070657e724730cb
+https://conda.anaconda.org/conda-forge/noarch/r-ggsci-5.2.0-r45hc72bb7e_0.conda#c3fb5f0d3f0ba43390189830f8ab8d86
+https://conda.anaconda.org/conda-forge/noarch/r-ggsignif-0.6.4-r45hc72bb7e_3.conda#9e52760864875ae35ba9b5961b921a25
 https://conda.anaconda.org/conda-forge/noarch/r-gh-1.6.1-r45hc72bb7e_0.conda#c26e14a9021dfadd58a31980087838a0
 https://conda.anaconda.org/conda-forge/linux-64/r-gridtext-0.1.6-r45h3697838_0.conda#221d34c980ea71c9ec46dacaf60dd9e6
 https://conda.anaconda.org/conda-forge/noarch/r-latticeextra-0.6_31-r45hc72bb7e_0.conda#e73f98941eef4322be7e248278a1b0aa
@@ -445,6 +448,7 @@ https://conda.anaconda.org/conda-forge/noarch/r-quantmod-0.4.29-r45hc72bb7e_0.co
 https://conda.anaconda.org/conda-forge/linux-64/r-ragg-1.5.2-r45h9f1dc4d_0.conda#3bbbc6a7401baca55f71a2811bee0aef
 https://conda.anaconda.org/conda-forge/noarch/r-rcmdcheck-1.4.0-r45h785f33e_4.conda#46cd08beb113bab9a16bc2a35ca9ea89
 https://conda.anaconda.org/conda-forge/linux-64/r-reshape2-1.4.5-r45h3697838_0.conda#169cd9281096cd54a29072a2d7eea2a9
+https://conda.anaconda.org/conda-forge/linux-64/r-svglite-2.2.2-r45h8ff94db_0.conda#5d210234086dd5bc39a96be23ccc7326
 https://conda.anaconda.org/conda-forge/linux-64/r-tibble-3.3.1-r45h54b55ab_0.conda#ad28f67cbb0b10a5beaa7bf968761cad
 https://conda.anaconda.org/conda-forge/linux-64/r-uwot-0.2.5-r45hfa9885e_0.conda#de1444ddbbb02e796b50bb288752cec9
 https://conda.anaconda.org/conda-forge/noarch/r-viridis-0.6.5-r45hc72bb7e_2.conda#e841095941c40142bdad834299b95a30
@@ -527,3 +531,4 @@ https://conda.anaconda.org/conda-forge/noarch/r-car-3.1_5-r45hc72bb7e_0.conda#e7
 https://conda.anaconda.org/conda-forge/linux-64/r-glmmtmb-1.1.14-r45h3697838_0.conda#39bb60e0ca53cc76914f954daf583fa5
 https://conda.anaconda.org/bioconda/noarch/bioconductor-maaslin2-1.22.0-r45hdfd78af_0.conda#04038f9a4bd7498791c7219718b71f44
 https://conda.anaconda.org/conda-forge/noarch/r-rstatix-1.1.0-r45hc72bb7e_0.conda#5b896426b6a5b977e5f217c35fb1d3c7
+https://conda.anaconda.org/conda-forge/noarch/r-ggpubr-1.0.0-r45hc72bb7e_0.conda#4e0ad1108964561c08e440ad1e4e4ef6
