@@ -200,6 +200,14 @@ if (!is.null(agr$interpretation)) {
 cat(paste(ap_report_guide(res), collapse = "\n"))
 ```
 
+```{r methods, results = "asis"}
+# out_dir is <run>/amplipub, so its parent is the run root holding q2/.
+cat(paste(ap_methods_section(res,
+                             run_dir = dirname(out_dir),
+                             provenance_dir = params$provenance_dir),
+          collapse = "\n"))
+```
+
 # Software
 
 ```{r session, results = "asis"}
