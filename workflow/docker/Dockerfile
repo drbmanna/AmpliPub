@@ -15,11 +15,15 @@
 
 FROM quay.io/qiime2/amplicon:2025.7
 
-COPY qiime2-amplicon-2025.7.lock amplipub-qc.lock amplipub-snakemake.lock amplipub-r.lock /opt/locks/
+COPY amplipub-qiime2-2025.7.lock amplipub-qc.lock amplipub-snakemake.lock amplipub-r.lock /opt/locks/
 
+# The removal below names the BASE IMAGE's own environment, which upstream calls
+# `qiime2-amplicon-2025.7`. Ours is `amplipub-qiime2-2025.7` and is created
+# fresh from the lockfile. These two names must not be conflated: renaming the
+# removal would leave the untrusted upstream env in the image.
 RUN set -eux; \
     conda env remove -y -n qiime2-amplicon-2025.7; \
-    for e in qiime2-amplicon-2025.7 amplipub-qc amplipub-snakemake amplipub-r; do \
+    for e in amplipub-qiime2-2025.7 amplipub-qc amplipub-snakemake amplipub-r; do \
       conda create -y -q -n "$e" --file "/opt/locks/$e.lock"; \
     done; \
     conda clean -y --all; \

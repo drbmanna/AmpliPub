@@ -294,7 +294,7 @@ def parse_args(argv):
                         f"(default {MAX_SAMPLE_LOSS}, our choice)")
     p.add_argument("--threads", type=int, default=1,
                    help="threads for core-metrics (default 1, as QIIME 2 does)")
-    p.add_argument("--env", default="qiime2-amplicon-2025.7", help="conda env with QIIME 2")
+    p.add_argument("--env", default="amplipub-qiime2-2025.7", help="conda env with QIIME 2")
     p.add_argument("--timeout", type=int, default=86400,
                    help="seconds before a step is killed (default 86400)")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")

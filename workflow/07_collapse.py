@@ -280,7 +280,7 @@ def parse_args(argv):
     p.add_argument("--sanitize-ids", action="store_true",
                    help="replace whitespace in sample ids with underscores. Writes the "
                         "before and after map, because renaming samples is on the record")
-    p.add_argument("--env", default="qiime2-amplicon-2025.7", help="conda env with QIIME 2")
+    p.add_argument("--env", default="amplipub-qiime2-2025.7", help="conda env with QIIME 2")
     p.add_argument("--timeout", type=int, default=86400,
                    help="seconds before a step is killed (default 86400)")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")

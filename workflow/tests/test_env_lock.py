@@ -118,7 +118,7 @@ def test_unreadable_env_exits_2(tmp_path, monkeypatch):
     assert cel.main(["--env", "x", "--lock", str(lock), "-o", str(tmp_path / "d.tsv")]) == 2
 
 
-@pytest.mark.parametrize("name", ["qiime2-amplicon-2025.7", "amplipub-qc",
+@pytest.mark.parametrize("name", ["amplipub-qiime2-2025.7", "amplipub-qc",
                                   "amplipub-snakemake", "amplipub-r"])
 def test_committed_lockfiles_are_complete(name):
     pkgs = cel.parse_explicit((ENVS / f"{name}.lock").read_text(), name)

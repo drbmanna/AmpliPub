@@ -320,7 +320,7 @@ def parse_args(argv):
                         f"choice, not a standard)")
     p.add_argument("--no-orientation-check", action="store_true",
                    help="do not try the other barcode orientations on low assignment")
-    p.add_argument("--env", default="qiime2-amplicon-2025.7", help="conda env with QIIME 2")
+    p.add_argument("--env", default="amplipub-qiime2-2025.7", help="conda env with QIIME 2")
     p.add_argument("--timeout", type=int, default=86400,
                    help="seconds before a step is killed (default 86400)")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")

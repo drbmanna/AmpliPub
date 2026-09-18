@@ -292,7 +292,7 @@ def parse_args(argv):
     p.add_argument("--allow-zero-read-samples", action="store_true",
                    help="downgrade the zero-read library check from hard fail to a flag. "
                         "A deliberate choice, recorded in criteria.tsv")
-    p.add_argument("--env", default="qiime2-amplicon-2025.7", help="conda env with QIIME 2")
+    p.add_argument("--env", default="amplipub-qiime2-2025.7", help="conda env with QIIME 2")
     p.add_argument("--timeout", type=int, default=86400,
                    help="seconds before denoise-paired is killed (default 86400)")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")

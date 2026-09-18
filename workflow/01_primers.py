@@ -259,7 +259,7 @@ def parse_args(argv):
     p.add_argument("--discard-untrimmed", action="store_true",
                    help="drop pairs where a primer was not found (only for reads that carry primers)")
     p.add_argument("--cores", type=int, default=4, help="CPU cores for cutadapt (default 4)")
-    p.add_argument("--env", default="qiime2-amplicon-2025.7", help="conda env with QIIME 2")
+    p.add_argument("--env", default="amplipub-qiime2-2025.7", help="conda env with QIIME 2")
     p.add_argument("--qc-env", default="amplipub-qc",
                    help="conda env with FastQC and MultiQC, for QC of trimmed reads")
     p.add_argument("--timeout", type=int, default=7200,

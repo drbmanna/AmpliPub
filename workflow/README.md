@@ -45,7 +45,7 @@ bash workflow/setup_envs.sh
 ```
 
 Creates four conda environments from the lockfiles in `envs/`:
-`qiime2-amplicon-2025.7`, `amplipub-qc` (FastQC and MultiQC), `amplipub-snakemake` and
+`amplipub-qiime2-2025.7`, `amplipub-qc` (FastQC and MultiQC), `amplipub-snakemake` and
 `amplipub-r`. The QC tools stay out of the QIIME 2 environment so the release environment
 is never modified.
 

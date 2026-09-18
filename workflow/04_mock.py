@@ -348,7 +348,7 @@ def parse_args(argv):
                         "reported as not attributable to the reference")
     p.add_argument("--low-depth-note", type=int, default=0,
                    help="log a note for any mock sample below this many reads (default 0, off)")
-    p.add_argument("--env", default="qiime2-amplicon-2025.7", help="conda env with QIIME 2")
+    p.add_argument("--env", default="amplipub-qiime2-2025.7", help="conda env with QIIME 2")
     p.add_argument("--timeout", type=int, default=3600,
                    help="seconds before an export step is killed (default 3600)")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")

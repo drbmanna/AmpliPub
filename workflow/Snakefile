@@ -349,7 +349,7 @@ rule diversity:
 
 # The committed lockfile for each env role. The env names are configurable; what the env
 # must contain is not.
-LOCKS = {"qiime2": WF / "envs" / "qiime2-amplicon-2025.7.lock",
+LOCKS = {"qiime2": WF / "envs" / "amplipub-qiime2-2025.7.lock",
          "qc": WF / "envs" / "amplipub-qc.lock",
          "r": WF / "envs" / "amplipub-r.lock"}
 

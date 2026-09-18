@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 # Create the conda envs the workflow stages call, from the committed lockfiles.
 #
-#   qiime2-amplicon-2025.7   QIIME 2 amplicon release       envs/qiime2-amplicon-2025.7.lock
+#   amplipub-qiime2-2025.7   QIIME 2 amplicon release       envs/amplipub-qiime2-2025.7.lock
 #   amplipub-qc              FastQC + MultiQC               envs/amplipub-qc.lock
 #   amplipub-snakemake       Snakemake                      envs/amplipub-snakemake.lock
 #   amplipub-r               R and every package AmpliPub   envs/amplipub-r.lock
 #                            uses, with AmpliPub itself installed from this checkout
+#
+# Every env name is prefixed `amplipub-` so none can collide with an environment the user
+# already has. The QIIME one was called `qiime2-amplicon-2025.7` until 2026-09-18, which is
+# the name QIIME 2's own install docs use: an existing QIIME 2 user would have been refused
+# on a clean install and, worse, `--rebuild` would have deleted their QIIME 2. Envs this
+# script creates are also marked, and --rebuild removes only marked ones.
 #
 # The lockfiles (`conda list --explicit --md5`, linux-64) pin every package, dependencies
 # included, so no solver runs and the env is the one the tests passed on. The *.yml files
@@ -31,7 +37,7 @@ esac
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
-q2_env="qiime2-amplicon-2025.7"
+q2_env="amplipub-qiime2-2025.7"
 qc_env="amplipub-qc"
 smk_env="amplipub-snakemake"
 r_env="amplipub-r"
@@ -56,6 +62,26 @@ for e in "${envs[@]}"; do
 done
 
 env_exists() { conda env list | awk '{print $1}' | grep -qx "$1"; }
+env_prefix() { conda env list | awk -v n="$1" '$1==n {print $NF}'; }
+
+# Ownership is recorded explicitly, not inferred from the name. `--rebuild`
+# deletes an environment, and deleting one the user built is not recoverable in
+# any way this script can offer. Until 2026-09-18 our QIIME env was called
+# `qiime2-amplicon-2025.7`, which is the name QIIME 2's own install docs use, so
+# `--rebuild` would have removed the QIIME 2 install of anyone who already had
+# one. The name is now prefixed, and this marker is the second line of defence
+# in case a name collides again.
+owner_marker=".amplipub-env"
+env_owned() {
+  local p; p="$(env_prefix "$1")"
+  [ -n "$p" ] && [ -f "$p/$owner_marker" ]
+}
+mark_owned() {
+  local p; p="$(env_prefix "$1")"
+  [ -n "$p" ] || return 0
+  printf 'created_by\tAmpliPub workflow/setup_envs.sh\nlock\t%s\ncreated\t%s\n' \
+    "$2" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$p/$owner_marker"
+}
 check_py="$here/scripts/check_env_lock.py"
 drift_dir="$(mktemp -d)"
 trap 'rm -rf "$drift_dir"' EXIT
@@ -64,22 +90,40 @@ trap 'rm -rf "$drift_dir"' EXIT
 for e in "${envs[@]}"; do
   IFS='|' read -r name spec lock <<<"$e"
   if env_exists "$name" && [ "$mode" = rebuild ]; then
-    echo "removing: $name"
-    timeout 1800 conda env remove -y -n "$name" </dev/null
+    if env_owned "$name"; then
+      echo "removing: $name"
+      timeout 1800 conda env remove -y -n "$name" </dev/null
+    else
+      echo "ERROR: $name exists but AmpliPub did not create it (no $owner_marker in its prefix)." >&2
+      echo "       Refusing to delete an environment that is not ours." >&2
+      echo "       Rename yours, or point envs.$name at a different name in your config." >&2
+      exit 1
+    fi
   fi
   if env_exists "$name"; then
     echo "exists: $name"
     if [ "$mode" != spec ]; then
       python3 "$check_py" --env "$name" --lock "$lock" -o "$drift_dir/$name.tsv" || {
-        echo "ERROR: $name is not the locked env. Fix with --rebuild." >&2; exit 1; }
+        echo "ERROR: $name differs from envs/$(basename "$lock")." >&2
+        if env_owned "$name"; then
+          echo "       AmpliPub created this env, so --rebuild will recreate it." >&2
+        else
+          # Never send someone to --rebuild for an env we do not own: that is the
+          # command that would delete it, and it will refuse anyway.
+          echo "       AmpliPub did not create this env. Do not rebuild it." >&2
+          echo "       Point the config at a different env name and rerun this script." >&2
+        fi
+        exit 1; }
     fi
   elif [ "$mode" = spec ]; then
     echo "creating from spec: $name"
     timeout 7200 conda env create -n "$name" --file "$spec" </dev/null
+    mark_owned "$name" "$(basename "$spec")"
     echo "NOTE: $name was solved, not locked. Test it, then re-lock and commit envs/$name.lock"
   else
     echo "creating from lock: $name"
     timeout 7200 conda create -y -n "$name" --file "$lock" </dev/null
+    mark_owned "$name" "$(basename "$lock")"
   fi
 done
 

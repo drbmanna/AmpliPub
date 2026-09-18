@@ -10,7 +10,7 @@
 outdir: /path/to/results/my_study
 
 envs:
-  qiime2: qiime2-amplicon-2025.7
+  qiime2: amplipub-qiime2-2025.7
   qc: amplipub-qc
   r: amplipub-r
 

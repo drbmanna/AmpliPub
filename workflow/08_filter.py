@@ -210,7 +210,7 @@ def parse_args(argv):
     p.add_argument("--min-sample-reads", type=int, default=0,
                    help="drop samples below this many reads after filtering "
                         "(default 0, off)")
-    p.add_argument("--env", default="qiime2-amplicon-2025.7", help="conda env with QIIME 2")
+    p.add_argument("--env", default="amplipub-qiime2-2025.7", help="conda env with QIIME 2")
     p.add_argument("--timeout", type=int, default=86400,
                    help="seconds before a step is killed (default 86400)")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")

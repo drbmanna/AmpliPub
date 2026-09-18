@@ -193,7 +193,7 @@ def parse_args(argv):
                    help=f"extra overlap for amplicon length variation (default {MARGIN})")
     p.add_argument("--n", type=int, default=N_SAMPLED,
                    help=f"reads sampled for the quality profile (default {N_SAMPLED})")
-    p.add_argument("--env", default="qiime2-amplicon-2025.7", help="conda env with QIIME 2")
+    p.add_argument("--env", default="amplipub-qiime2-2025.7", help="conda env with QIIME 2")
     p.add_argument("--timeout", type=int, default=3600,
                    help="seconds before demux summarize is killed (default 3600)")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")

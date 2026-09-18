@@ -416,7 +416,7 @@ def parse_args(argv):
                         "always passed explicitly (default 1)")
     p.add_argument("--confidence", type=float, default=0.7,
                    help="classify-sklearn confidence, default 0.7, which is also QIIME 2's")
-    p.add_argument("--env", default="qiime2-amplicon-2025.7", help="conda env with QIIME 2")
+    p.add_argument("--env", default="amplipub-qiime2-2025.7", help="conda env with QIIME 2")
     p.add_argument("--timeout", type=int, default=86400,
                    help="seconds before a classify step is killed (default 86400)")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")

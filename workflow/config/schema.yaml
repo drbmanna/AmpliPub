@@ -28,7 +28,7 @@ properties:
   envs:
     type: object
     properties:
-      qiime2: {type: string, default: "qiime2-amplicon-2025.7"}
+      qiime2: {type: string, default: "amplipub-qiime2-2025.7"}
       qc: {type: string, default: "amplipub-qc"}
       r: {type: string, default: "amplipub-r"}
     required: [qiime2, qc, r]
