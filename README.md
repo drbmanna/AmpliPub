@@ -278,12 +278,25 @@ Planned for later 0.0.x releases, in no fixed order:
   runs as written without any download.
 - **Longer amplicon regions.** Support for V3-V4 data, with settings and a reference
   classifier suited to the longer read.
+- **Fungal and eukaryotic markers.** ITS and 18S from raw reads to report, with their own
+  primers, region extraction and reference databases. The R layer already accepts these
+  tables; the workflow does not yet.
+- **Habitat-aware taxonomy.** Classifiers weighted for the environment the samples come
+  from, such as gut, soil, marine or skin, which sharpens species-level assignments.
+- **Low-biomass samples.** Use of negative controls and removal of contaminant sequences,
+  the main source of false findings in low-biomass studies.
 - **Functional profiles.** Predicted functional content of the community, labelled in the
   report as inferred rather than measured.
 - **Co-occurrence networks.** Networks of associated taxa, with the method choice and its
   limits for compositional data stated in the report.
 - **Links to other measurements.** Tests relating the community to environmental, chemical
   or clinical variables recorded for the same samples, with multiple testing correction.
+- **Longitudinal and paired designs.** Change within a subject over time and community
+  trajectories, beyond a random intercept for repeated samples.
+- **Prediction models.** Classifiers that predict a group from the community, with
+  cross-validation that keeps the test samples out of every tuning step.
+- **Reporting checklist.** The STORMS microbiome reporting checklist, filled in from what
+  the run actually did.
 - **Benchmarks.** A number-for-number comparison with other amplicon tools on shared
   statistics, and a test of whether AmpliPub's defaults lead to fewer wrong conclusions on
   simulated and published data, with success criteria set before it runs.
