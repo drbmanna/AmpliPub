@@ -163,9 +163,17 @@ ap_permanova(b, terms = "dx")
 x2 <- x[, x$dx %in% c("cancer", "normal")]   # one two-group contrast (ALDEx2 takes two groups)
 d  <- ap_da(x2, group = "dx", reference = "normal")
 ap_da_concordance(d)
-ap_save_figure(ap_plot_alpha(a, group = "dx", test = at, publication = TRUE),
+
+# Figure labels: axis titles, group names and palette
+pub <- ap_pub_options(labels = list(dx = "Diagnosis"),
+                      level_labels = list(cancer = "CRC"), palette = "npg")
+ap_save_figure(ap_plot_alpha(a, group = "dx", test = at, publication = TRUE, pub = pub),
                "alpha", dir = "figures")
 ```
+
+Every publication plot takes the same `pub` argument. Without it, axes show the metadata
+column name (`dx`). The pipeline sets the same options from the `publication:` block of its
+config file; see `?ap_pub_options`.
 
 `dx`, `cancer`, `normal` and the depth are placeholders for your own grouping variable, its
 levels and the rarefaction depth. The tree and taxonomy are optional. Argument details are in
