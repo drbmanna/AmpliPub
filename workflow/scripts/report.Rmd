@@ -67,6 +67,16 @@ if (file.exists(status) && length(readLines(status, warn = FALSE)) > 0L) {
 cat("```\n"); show(res$scan); cat("\n```\n")
 ```
 
+# What each analysis used
+
+There is no single preprocessing stage. Each analysis gets the table and normalization its
+method assumes: diversity a rarefied table, differential abundance raw counts and each
+method's own normalization, the composition figures proportions or CLR.
+
+```{r preprocessing}
+tbl(ap_preprocessing_summary(res))
+```
+
 # Alpha diversity
 
 Computed on the rarefied table from `10_diversity` (depth `r res$depth`).
@@ -99,6 +109,19 @@ tbl(merge(res$permanova$results, res$permanova$interpretation[, c("metric", "ter
 for (i in seq_len(nrow(res$permanova$interpretation))) {
   r <- res$permanova$interpretation[i, ]
   cat("- **", r$metric, "**: ", r$interpretation, "\n", sep = "")
+}
+```
+
+```{r permanova-pairwise, results = "asis"}
+if (!is.null(res$permanova$pairwise)) {
+  cat("## Pairwise PERMANOVA\n\n",
+      "Which groups differ, one `adonis2` per pair, FDR-adjusted within each ",
+      "metric and term. Read `q`, not `p`.\n\n", sep = "")
+  pw <- res$permanova$pairwise
+  tbl(data.frame(metric = pw$metric, term = pw$term,
+                 pair = paste(pw$group1, "vs", pw$group2),
+                 pseudo_F = round(pw$pseudo_F, 3), R2 = round(pw$R2, 4),
+                 p = pw$p, q = round(pw$p_adj, 4)))
 }
 ```
 

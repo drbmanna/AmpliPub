@@ -41,7 +41,8 @@ ap_da_concordance <- function(da, contrast = NULL, min_methods = NULL) {
     sub <- r[r$method == m, ]
     idx <- match(sub$feature, features)
     sig[idx, m] <- sub$significant
-    dir[idx, m] <- sign(sub$effect)
+    # `direction` carries the sign for structural zeros, which have no effect.
+    dir[idx, m] <- if ("direction" %in% names(sub)) sub$direction else sign(sub$effect)
   }
 
   n_called <- rowSums(sig)

@@ -151,3 +151,29 @@ test_that("the draft is labelled as a draft, because it is not submission-ready"
   expect_true(grepl("Draft generated", m, fixed = TRUE))
   expect_true(grepl("Check every number", m, fixed = TRUE))
 })
+
+test_that("the preprocessing summary names each analysis's table and normalization", {
+  res <- list(
+    depth = 5000L,
+    alpha = list(), alpha_repeated = list(rarefied = TRUE, n_iter = 10L, depth = 5000L, seed = 3L),
+    beta = list(metrics = c("bray_curtis", "aitchison"), pseudocount = 0.5),
+    da = list(prv_cut = 0.1, n_features = 50L, n_samples = 20L,
+              methods = c("ancombc2", "maaslin2")),
+    normalization = list(methods = c("tss", "rarefy"), permutations = 99L),
+    config = list(analysis = list(seed = 3L, da_levels = list("a", "b")),
+                  filter = list(include = "Bacteria", exclude = "mitochondria,chloroplast",
+                                min_samples_fraction = 0.05))
+  )
+  s <- ap_preprocessing_summary(res)
+  expect_named(s, c("analysis", "input", "filter", "normalization"))
+  expect_match(s$normalization[s$analysis == "Alpha diversity and its tests"], "5,000 reads in R, seed 3")
+  beta <- s[grepl("^Beta diversity", s$analysis), ]
+  expect_match(beta$normalization, "Aitchison: zeros replaced by 0.5")
+  da <- s[grepl("^Differential abundance", s$analysis), ]
+  expect_match(da$input, "raw counts")
+  expect_match(da$filter, "10% of those samples")
+  expect_match(da$normalization, "pseudocount sensitivity")
+  expect_no_match(da$normalization, "ALDEx2")
+  expect_match(s$filter[1], "mitochondria and chloroplast sequences removed")
+  expect_match(s$normalization[s$analysis == "Normalization sensitivity"], "TSS and rarefying")
+})

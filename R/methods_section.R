@@ -96,6 +96,10 @@ ap_methods_section <- function(res, run_dir = NULL, provenance_dir = NULL) {
     add(sprintf(paste0("Taxonomy was assigned with the QIIME 2 naive Bayes classifier ",
                        "(q2-feature-classifier%s) against %s, at a confidence threshold of %s."),
                 ver("q2-feature-classifier", " "), cl$name, cl$confidence %||% NA))
+    add(paste0("Taxon names are given as in the reference with the rank prefix removed. ",
+               "Letter and numeric suffixes that separate lineages sharing a name are kept ",
+               "as part of the name, and features unassigned at a rank are labelled with ",
+               "the deepest rank they reached."))
   }
 
   add(sprintf(paste0("Representative sequences were aligned with MAFFT%s, the alignment was ",
@@ -182,6 +186,11 @@ ap_methods_section <- function(res, run_dir = NULL, provenance_dir = NULL) {
                        "unequal dispersion and a significant result alone cannot distinguish a ",
                        "shift in location from a difference in spread."),
                 cite("vegan"), format(an$permutations %||% 999, big.mark = ",")))
+    if (!is.null(res$permanova$pairwise)) {
+      add(paste0("For terms with three or more groups, pairwise PERMANOVA was run between ",
+                 "each pair of groups on the distance matrix subset to that pair, with ",
+                 "p-values adjusted by the Benjamini-Hochberg procedure within each term."))
+    }
   }
 
   if (!is.null(res$ordination_diagnostics)) {
@@ -206,16 +215,23 @@ ap_methods_section <- function(res, run_dir = NULL, provenance_dir = NULL) {
       p <- ap_da_pkg(m); if (is.na(p)) "" else cite(p)
     }, character(1))
     shown <- paste0(labs, ifelse(nzchar(keys), paste0(" (", keys, ")"), ""))
+    primary <- an$da_primary %||% "ancombc2"
     add(sprintf(paste0("Differential abundance was assessed with %s, all run on the same ",
-                       "pre-filtered feature set%s. Results are reported per method, and a ",
-                       "consensus set was defined as features called by at least %s methods ",
-                       "that also agreed on the direction of the effect. Because these methods ",
-                       "differ in their assumptions about compositionality, zeros and ",
-                       "normalization, agreement between them is reported rather than the ",
-                       "output of any single method."),
+                       "pre-filtered feature set%s.%s%s Because these methods differ in their ",
+                       "assumptions about compositionality, zeros and normalization, the other ",
+                       "methods are reported alongside it, and a consensus set was defined as ",
+                       "features called by at least %s methods that also agreed on the direction ",
+                       "of the effect."),
                 ap_and(shown),
                 if (!is.null(an$da_reference)) sprintf(" against the reference level `%s`",
                                                        an$da_reference) else "",
+                if ("ancombc2" %in% meths) paste0(
+                  " ANCOM-BC2 calls were required to pass its pseudocount sensitivity ",
+                  "analysis (the package's robust call).") else "",
+                if (primary %in% meths) sprintf(paste0(
+                  " %s was designated the primary method in the analysis configuration; its ",
+                  "effect estimates are reported with 95%% Wald intervals (estimate %s 1.96 ",
+                  "standard errors)."), ap_da_method_title(primary), "±") else "",
                 res$concordance$min_methods %||% length(meths)))
   }
 

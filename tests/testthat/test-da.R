@@ -285,3 +285,114 @@ test_that("feature IDs survive every backend unchanged, digits and all", {
   # Which is what makes the union equal the tested set rather than double it.
   expect_equal(length(unique(da$results$feature)), da$n_features)
 })
+
+# ANCOM-BC2's robust call (2026-09-18). ANCOMBC defines diff_robust as q < alpha AND
+# passed_ss, and recommends it for the final call. On Baxter 145 of 146 calls failed the
+# sensitivity analysis and were being counted. These tests mock the package output so the
+# guard is proven to fire without depending on a real run producing a failure.
+fake_ancombc2_out <- function(taxa, lvl = "b") {
+  n <- length(taxa)
+  out <- data.frame(taxon = taxa)
+  out[[paste0("lfc_group", lvl)]] <- c(2, 1.5, rep(0.01, n - 2))
+  out[[paste0("se_group", lvl)]] <- 0.2
+  out[[paste0("W_group", lvl)]] <- out[[paste0("lfc_group", lvl)]] / 0.2
+  out[[paste0("p_group", lvl)]] <- c(1e-6, 1e-6, rep(0.9, n - 2))
+  out[[paste0("q_group", lvl)]] <- c(1e-5, 1e-5, rep(0.95, n - 2))
+  out[[paste0("passed_ss_group", lvl)]] <- c(TRUE, FALSE, rep(TRUE, n - 2))
+  out
+}
+
+test_that("an ANCOM-BC2 call that failed its sensitivity analysis is not significant", {
+  skip_if_not_installed("ANCOMBC")
+  x <- ap_fixture_object(tree = FALSE, taxonomy = FALSE)
+  taxa <- rownames(x)
+  local_mocked_bindings(ancombc2 = function(...) list(res = fake_ancombc2_out(taxa)),
+                        .package = "ANCOMBC")
+  da <- suppressMessages(ap_da(x, "group", method = "ancombc2", prv_cut = 0))
+  r <- da$results
+  robust <- r[r$feature == taxa[1], ]
+  fragile <- r[r$feature == taxa[2], ]
+  expect_true(robust$significant)
+  expect_false(robust$failed_sensitivity)
+  # Same q-value, failed the sensitivity analysis: kept, flagged, not counted.
+  expect_lt(fragile$p_adj, da$alpha)
+  expect_false(fragile$significant)
+  expect_true(fragile$failed_sensitivity)
+  expect_equal(fragile$note, "failed pseudocount sensitivity")
+  expect_equal(sum(r$significant), 1L)
+})
+
+test_that("the concordance counts only ANCOM-BC2's robust calls", {
+  skip_if_not_installed("ANCOMBC")
+  x <- ap_fixture_object(tree = FALSE, taxonomy = FALSE)
+  taxa <- rownames(x)
+  local_mocked_bindings(ancombc2 = function(...) list(res = fake_ancombc2_out(taxa)),
+                        .package = "ANCOMBC")
+  da <- suppressMessages(ap_da(x, "group", method = "ancombc2", prv_cut = 0))
+  cc <- ap_da_concordance(da)
+  expect_equal(as.integer(cc$n_by_method[["ancombc2"]]), 1L)
+})
+
+test_that("ancombc2 output without a passed_ss column is refused, not trusted", {
+  skip_if_not_installed("ANCOMBC")
+  x <- ap_fixture_object(tree = FALSE, taxonomy = FALSE)
+  taxa <- rownames(x)
+  bad <- fake_ancombc2_out(taxa)
+  bad$passed_ss_groupb <- NULL
+  local_mocked_bindings(ancombc2 = function(...) list(res = bad), .package = "ANCOMBC")
+  expect_error(suppressMessages(ap_da(x, "group", method = "ancombc2", prv_cut = 0)),
+               "Every method failed")
+})
+
+test_that("methods without their own robustness check are unaffected", {
+  r <- ap_da_row(feature = c("f1", "f2"), method = "linda", effect = c(1, -1),
+                 effect_scale = "log2 fold change", se = 0.1, statistic = 10,
+                 p = 1e-6, p_adj = 1e-5, contrast = "b")
+  expect_true(all(is.na(r$passed_sensitivity)))
+})
+
+# ANCOM-BC2 structural zeros (2026-09-19). ancombc2 drops a taxon absent from a whole group
+# from `res` and lists it only in `zero_ind`; AmpliPub adds it back as a directional call.
+test_that("a structural zero comes back as a call with a direction and no p-value", {
+  skip_if_not_installed("ANCOMBC")
+  x <- ap_fixture_object(tree = FALSE, taxonomy = FALSE)
+  taxa <- rownames(x)
+  est <- fake_ancombc2_out(taxa[-(1:2)])
+  zi <- data.frame(taxon = taxa, check.names = FALSE)
+  zi[["structural_zero (group = a)"]] <- c(TRUE, FALSE, rep(FALSE, length(taxa) - 2))
+  zi[["structural_zero (group = b)"]] <- c(FALSE, TRUE, rep(FALSE, length(taxa) - 2))
+  local_mocked_bindings(ancombc2 = function(...) list(res = est, zero_ind = zi),
+                        .package = "ANCOMBC")
+  da <- suppressMessages(ap_da(x, "group", method = "ancombc2", prv_cut = 0))
+  r <- da$results
+  absent_a <- r[r$feature == taxa[1], ]
+  absent_b <- r[r$feature == taxa[2], ]
+  # Reference is a. Absent from a = higher in b (+1); absent from b = lower (-1).
+  expect_true(absent_a$structural_zero && absent_a$significant)
+  expect_equal(absent_a$direction, 1)
+  expect_equal(absent_b$direction, -1)
+  expect_true(is.na(absent_a$p_adj) && is.na(absent_a$effect))
+  expect_match(absent_a$note, "absent from a")
+  # No feature vanished: every input taxon has an ANCOM-BC2 row.
+  expect_setequal(r$feature, taxa)
+  cc <- ap_da_concordance(da)
+  expect_equal(cc$features$n_methods[cc$features$feature == taxa[1]], 1L)
+})
+
+test_that("real ancombc2 declares a planted structural zero and AmpliPub keeps it", {
+  skip_on_cran()
+  skip_if_no_ancombc2()
+  x <- ap_fixture_object(tree = FALSE, taxonomy = FALSE)
+  cnt <- SummarizedExperiment::assay(x, "counts")
+  g <- SummarizedExperiment::colData(x)$group
+  target <- rownames(cnt)[which.max(rowSums(cnt))]
+  cnt[target, g == "a"] <- 0
+  SummarizedExperiment::assay(x, "counts") <- cnt
+  da <- suppressWarnings(suppressMessages(
+    ap_da(x, "group", method = "ancombc2", prv_cut = 0, reference = "a")))
+  row <- da$results[da$results$feature == target, ]
+  expect_equal(nrow(row), 1L)
+  expect_true(row$structural_zero)
+  expect_equal(row$direction, 1)
+  expect_true(row$significant)
+})

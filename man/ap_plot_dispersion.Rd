@@ -4,7 +4,13 @@
 \alias{ap_plot_dispersion}
 \title{Plot within-group dispersion}
 \usage{
-ap_plot_dispersion(permanova, metric = NULL, term = NULL)
+ap_plot_dispersion(
+  permanova,
+  metric = NULL,
+  term = NULL,
+  publication = FALSE,
+  pub = ap_pub_options()
+)
 }
 \arguments{
 \item{permanova}{An \code{ap_permanova} result from \code{\link[=ap_permanova]{ap_permanova()}}.}
@@ -12,6 +18,13 @@ ap_plot_dispersion(permanova, metric = NULL, term = NULL)
 \item{metric}{Which metric to plot. Defaults to the first.}
 
 \item{term}{Which term to plot. Defaults to the first.}
+
+\item{publication}{Draw the publication version: no subtitle or caption,
+\code{\link[=ap_theme_pub]{ap_theme_pub()}}, ggsci colours, and the betadisper statistics on the panel
+as plotmath. The method note and the PERMANOVA verdict go to the legend text
+from \code{\link[=ap_dispersion_legend]{ap_dispersion_legend()}}. Default \code{FALSE}.}
+
+\item{pub}{\code{\link[=ap_pub_options]{ap_pub_options()}} for \code{publication = TRUE}.}
 }
 \value{
 A ggplot object.

@@ -8,7 +8,9 @@ ap_plot_volcano(
   da,
   contrast = NULL,
   label_top = 8L,
-  label_by = c("effect", "significance")
+  label_by = c("effect", "significance"),
+  publication = FALSE,
+  pub = ap_pub_options()
 )
 }
 \arguments{
@@ -20,6 +22,13 @@ ap_plot_volcano(
 
 \item{label_by}{\code{"effect"} (default) labels the largest effects,
 \code{"significance"} the smallest q-values.}
+
+\item{publication}{Draw the publication version: two columns of panels, each
+titled with its method and effect scale, the smallest q-values labelled in
+italics, calls that failed ANCOM-BC2's sensitivity analysis as open circles.
+Settings and counts go to \code{\link[=ap_da_legend]{ap_da_legend()}}.}
+
+\item{pub}{\code{\link[=ap_pub_options]{ap_pub_options()}} for \code{publication = TRUE}.}
 }
 \value{
 A ggplot object.

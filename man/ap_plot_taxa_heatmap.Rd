@@ -9,7 +9,11 @@ ap_plot_taxa_heatmap(
   rank = "genus",
   n = 15L,
   group = NULL,
-  pseudocount = 1e-05
+  pseudocount = 1e-05,
+  publication = FALSE,
+  reference = NULL,
+  clr_pseudocount = 0.5,
+  pub = ap_pub_options()
 )
 }
 \arguments{
@@ -22,6 +26,21 @@ ap_plot_taxa_heatmap(
 \item{group}{Optional metadata variable to facet by.}
 
 \item{pseudocount}{Added before the log. Default \code{1e-5}.}
+
+\item{publication}{Draw the publication version, which compares groups rather than
+showing samples: one column per group, each cell the group's mean CLR for that
+taxon minus a baseline, on a diverging scale centred on 0. Needs \code{group}. See the
+section below.}
+
+\item{reference}{For \code{publication = TRUE}: a level of \code{group} to use as the baseline.
+\code{NULL} (default) uses the average of the group means instead, and every group gets
+a column. When a reference is given its column would be all zeros, so it is not
+drawn; the colour bar title and \code{\link[=ap_taxa_legend]{ap_taxa_legend()}} name the reference instead.}
+
+\item{clr_pseudocount}{For \code{publication = TRUE}: the value that replaces zeros before
+the CLR, passed to \code{\link[=ap_normalize]{ap_normalize()}}. Default \code{0.5}.}
+
+\item{pub}{\code{\link[=ap_pub_options]{ap_pub_options()}} for \code{publication = TRUE}.}
 }
 \value{
 A ggplot object.
@@ -35,3 +54,18 @@ Log scale because abundance spans orders of magnitude and a linear colour
 scale renders everything below the top few taxa as the same shade of nothing.
 The pseudocount that makes the log defined is stated in the caption.
 }
+\section{The publication heatmap}{
+
+Relative abundances are compositional: one taxon growing shrinks every other taxon's
+share, so a difference in proportions between groups can be produced by other taxa.
+The publication heatmap therefore works on the centred log-ratio (CLR) scale, computed
+on every taxon at \code{rank}, not only the ones shown. Each cell is the group's mean CLR
+minus a baseline: the reference group's mean when \code{reference} is given (its column
+is then all zeros and is dropped), otherwise the unweighted average of the group
+means, so no group has to be the reference and a large group does not pull the
+centre toward itself. The row is centred but not scaled: a z-score would stretch
+every row to the same range, however small the real difference, and with few groups
+that makes noise look like a finding. The figure is descriptive; differential
+abundance is tested by \code{\link[=ap_da]{ap_da()}}.
+}
+

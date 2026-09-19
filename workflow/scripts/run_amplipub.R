@@ -31,7 +31,8 @@ dir_prov <- file.path(out_dir, "provenance")
 dir_pub <- file.path(out_dir, "figures_publication")
 pc <- cfg$publication %||% list()
 pub <- ap_pub_options(palette = pc$palette %||% "npg", labels = pc$labels %||% list(),
-                      capitalize_levels = pc$capitalize_levels %||% TRUE)
+                      capitalize_levels = pc$capitalize_levels %||% TRUE,
+                      level_labels = pc$level_labels %||% list())
 for (d in c(dir_tables, dir_figures, dir_prov)) dir.create(d, recursive = TRUE, showWarnings = FALSE)
 
 started <- Sys.time()
@@ -166,6 +167,7 @@ print(permanova)
 write_tsv(permanova$results, "permanova")
 write_tsv(permanova$dispersion, "permanova_dispersion")
 write_tsv(permanova$interpretation, "permanova_interpretation")
+if (!is.null(permanova$pairwise)) write_tsv(permanova$pairwise, "permanova_pairwise")
 # The ordinations are kept, not discarded inside the loop. Their stress and
 # negative eigenvalue mass say whether the panels below can be read as a map,
 # and before 2026-09-18 that was computed and thrown away.
@@ -178,8 +180,11 @@ for (m in beta$metrics) {
            paste0("ordination_", m))
   try_pub(ap_plot_ordination(ord, group = an$group, permanova = permanova,
                              publication = TRUE, pub = pub),
-          paste0("ordination_", m), legend = ap_ordination_legend(ord, permanova, an$group))
+          paste0("ordination_", m), legend = ap_ordination_legend(ord, permanova, an$group, pub))
   try_plot(ap_plot_dispersion(permanova, metric = m, term = an$group), paste0("dispersion_", m))
+  try_pub(ap_plot_dispersion(permanova, metric = m, term = an$group,
+                             publication = TRUE, pub = pub),
+          paste0("dispersion_", m), legend = ap_dispersion_legend(permanova, m, an$group, pub))
 }
 ordination_diagnostics <- ap_ordination_diagnostics(ords)
 write_tsv(ordination_diagnostics, "ordination_diagnostics")
@@ -194,6 +199,21 @@ try_plot(ap_plot_taxa_bar(x, rank = "genus", n = 15L, group = an$group, mode = "
          "taxa_genus_bars", width = 9)
 try_plot(ap_plot_taxa_heatmap(x, rank = "genus", n = 25L, group = an$group),
          "taxa_genus_heatmap", width = 10, height = 6)
+# Publication composition figures at every rank the taxonomy reached, so the author picks
+# the rank the paper needs. Domain is skipped: one or two bars say nothing.
+pub_ranks <- intersect(c("phylum", "class", "order", "family", "genus", "species"),
+                       colnames(SummarizedExperiment::rowData(x)))
+for (rk in pub_ranks) {
+  try_pub(ap_plot_taxa_bar(x, rank = rk, n = 15L, group = an$group, publication = TRUE, pub = pub),
+          paste0("taxa_", rk, "_bars"), legend = ap_taxa_legend(x, rk, an$group, 15L, "bar", pub = pub))
+  # Same baseline as differential abundance when one is configured; otherwise the average
+  # of the group means.
+  try_pub(ap_plot_taxa_heatmap(x, rank = rk, n = 15L, group = an$group, publication = TRUE,
+                               reference = an$da_reference, pub = pub),
+          paste0("taxa_", rk, "_heatmap"),
+          legend = ap_taxa_legend(x, rk, an$group, 15L, "heatmap", reference = an$da_reference,
+                                 pub = pub))
+}
 
 # --- differential abundance ---------------------------------------------------------------------
 
@@ -216,6 +236,16 @@ write_tsv(concordance$features, "da_concordance")
 try_plot(ap_plot_volcano(da), "da_volcano", width = 9, height = 6)
 try_plot(ap_plot_concordance(concordance), "da_concordance", width = 8, height = 8)
 try_plot(ap_plot_da_effects(concordance), "da_effects", width = 8, height = 6)
+# Publication: the main-text figure is the declared primary method's effects (at most 25
+# enriched and 25 depleted); the concordance dot plot and the volcano panels are the
+# supplementary checks against the other methods.
+da_primary <- an$da_primary %||% "ancombc2"
+try_pub(ap_plot_da_primary(concordance, da_primary, pub = pub), "da_primary",
+        legend = ap_da_legend(concordance, "primary", da_primary, pub = pub))
+try_pub(ap_plot_concordance(concordance, publication = TRUE, pub = pub), "da_concordance",
+        legend = ap_da_legend(concordance, "concordance", pub = pub))
+try_pub(ap_plot_volcano(da, publication = TRUE, pub = pub), "da_volcano",
+        legend = ap_da_legend(concordance, "volcano", pub = pub))
 
 # --- screen and confirmatory model ---------------------------------------------------------------
 
@@ -254,12 +284,15 @@ write_tsv(normalization$agreement, "normalization_agreement")
 # --- results and provenance --------------------------------------------------------------------
 
 section("provenance")
-saveRDS(list(scan = scan, depth = depth, alpha = alpha, alpha_test = alpha_test,
-             alpha_repeated = alpha_repeated, beta = beta, permanova = permanova,
-             ordination_diagnostics = ordination_diagnostics,
-             da = da, concordance = concordance, screen = screen, explains = explains,
-             normalization = normalization, config = cfg),
-        snakemake@output[["results"]])
+results <- list(scan = scan, depth = depth, alpha = alpha, alpha_test = alpha_test,
+                alpha_repeated = alpha_repeated, beta = beta, permanova = permanova,
+                ordination_diagnostics = ordination_diagnostics,
+                da = da, concordance = concordance, screen = screen, explains = explains,
+                normalization = normalization, config = cfg)
+saveRDS(results, snakemake@output[["results"]])
+# Which table, filter and normalization each analysis used: there is no single
+# preprocessing stage, so this is written down rather than left to be inferred.
+write_tsv(ap_preprocessing_summary(results), "preprocessing_summary")
 
 sha256 <- function(path) {
   p <- normalizePath(path)

@@ -16,8 +16,6 @@
 ap_qiime_dir <- function() {
   env <- Sys.getenv("AMPLIPUB_QIIME_DIR", unset = "")
   if (nzchar(env) && dir.exists(env)) return(env)
-  default <- "//wsl.localhost/Ubuntu-24.04/home/ome/research/baxter2016/q2"
-  if (dir.exists(default)) return(default)
   ""
 }
 

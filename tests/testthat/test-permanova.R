@@ -168,3 +168,62 @@ test_that("the dispersion plot builds and refuses a continuous term", {
   expect_s3_class(ap_plot_dispersion(pn, "bray_curtis", "group"), "ggplot")
   expect_error(ap_plot_dispersion(pn, "bray_curtis", "age"), "continuous")
 })
+
+# --- pairwise PERMANOVA (MicrobiomeAnalystR .permanova_pairwise) ---
+
+# A three-group table, so there is a pairwise breakdown the omnibus does not give.
+ap_permanova_fixture3 <- function() {
+  set.seed(31)
+  n_f <- 40L; per <- 18L
+  base <- stats::runif(n_f, 5, 50)
+  b2 <- base; b2[1:8] <- b2[1:8] * 2.2
+  b3 <- base; b3[9:16] <- b3[9:16] * 2.2
+  draw <- function(props, n) vapply(seq_len(n), function(i) {
+    lambda <- pmax(props * stats::rlnorm(n_f, 0, 0.4), 0.1)
+    stats::rmultinom(1, 4000, lambda / sum(lambda))[, 1]
+  }, numeric(n_f))
+  counts <- cbind(draw(base, per), draw(b2, per), draw(b3, per))
+  dimnames(counts) <- list(paste0("f", seq_len(n_f)), paste0("s", seq_len(3 * per)))
+  meta <- data.frame(g = rep(c("a", "b", "c"), each = per),
+                     row.names = colnames(counts), stringsAsFactors = FALSE)
+  ap_permanova_fixture(counts, meta)
+}
+
+test_that("pairwise PERMANOVA gives one row per group pair with an FDR within the term", {
+  pn <- ap_permanova(ap_permanova_fixture3(), "g", permutations = 199L, seed = 1L)
+  pw <- pn$pairwise
+  expect_false(is.null(pw))
+  expect_setequal(paste(pw$group1, pw$group2), c("a b", "a c", "b c"))
+  expect_named(pw, c("metric", "term", "group1", "group2", "n", "pseudo_F", "R2", "p", "p_adj"))
+  # FDR is BH within the metric-and-term family, so adjusted p is never below raw p.
+  expect_true(all(pw$p_adj >= pw$p - 1e-9))
+  expect_equal(pw$p_adj, unname(stats::p.adjust(pw$p, "BH")))
+  # Each pair's n is the two groups' samples, not the whole table.
+  expect_true(all(pw$n == 36L))
+})
+
+test_that("two groups get no pairwise table, since the omnibus already is it", {
+  x <- ap_fixture_object(tree = FALSE, taxonomy = FALSE)
+  b <- ap_beta(x, metrics = "bray_curtis", rarefy = FALSE)
+  pn <- ap_permanova(b, "group", permutations = 99L)
+  expect_null(pn$pairwise)
+})
+
+test_that("pairwise = FALSE turns the breakdown off", {
+  pn <- ap_permanova(ap_permanova_fixture3(), "g", permutations = 99L, pairwise = FALSE)
+  expect_null(pn$pairwise)
+})
+
+test_that("a continuous term contributes no pairwise rows", {
+  x <- ap_fixture_object(tree = FALSE, taxonomy = FALSE)
+  b <- ap_beta(x, metrics = "bray_curtis", rarefy = FALSE)
+  pn <- ap_permanova(b, c("group", "age"), permutations = 99L)
+  expect_false("age" %in% pn$pairwise$term)  # NULL or a table without age; both pass
+})
+
+test_that("the seed makes pairwise p-values reproducible", {
+  f <- ap_permanova_fixture3()
+  p1 <- ap_permanova(f, "g", permutations = 199L, seed = 7L)$pairwise
+  p2 <- ap_permanova(f, "g", permutations = 199L, seed = 7L)$pairwise
+  expect_equal(p1$p, p2$p)
+})

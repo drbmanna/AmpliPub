@@ -26,7 +26,8 @@ ap_da_ancombc2 <- function(counts, meta, group, covariates, subject, alpha,
     assay.type = "counts",
     fix_formula = ap_da_formula(group, covariates),
     rand_formula = if (is.null(subject)) NULL else paste0("(1 | ", subject, ")"),
-    group = if (nlevels(meta[[group]]) > 2L) group else NULL,
+    # `group` is required for structural-zero detection, so it is always given.
+    group = group,
     # prv_cut = 0: AmpliPub filtered once already, and letting ancombc2 filter
     # again would give it a different feature set from the other methods.
     prv_cut = 0,
@@ -37,8 +38,13 @@ ap_da_ancombc2 <- function(counts, meta, group, covariates, subject, alpha,
     # all four methods.
     p_adj_method = p_adj_method,
     alpha = alpha,
-    struc_zero = FALSE,
-    neg_lb = FALSE,
+    # Structural zeros: a taxon absent (or nearly) from every sample of a group is
+    # declared differentially abundant without a test (ANCOM-II). neg_lb adds
+    # ANCOM-II's lower-bound criterion, which the help page recommends when groups
+    # are large (> 30). ancombc2 drops such taxa from `res`; they are added back
+    # below from `zero_ind`, or they would silently vanish from the comparison.
+    struc_zero = TRUE,
+    neg_lb = min(table(meta[[group]])) > 30L,
     pseudo_sens = TRUE,
     verbose = FALSE,
     n_cl = 1
@@ -50,27 +56,62 @@ ap_da_ancombc2 <- function(counts, meta, group, covariates, subject, alpha,
   ap_assert(length(lfc_cols) > 0L,
             "ancombc2 returned no coefficient for `{group}`.")
 
+  zi <- res$zero_ind
+  reference <- levels(meta[[group]])[1]
+
   do.call(rbind, lapply(lfc_cols, function(lc) {
     contrast <- sub(paste0("^lfc_", group), "", lc)
     suffix <- sub("^lfc_", "", lc)
     ss_col <- paste0("passed_ss_", suffix)
-    # The sensitivity score says whether a call survives varying the
-    # pseudocount. Dropping it, which is the usual thing, discards ANCOM-BC2's
-    # own statement about how fragile its call is.
-    note <- if (ss_col %in% colnames(out)) {
-      ifelse(out[[ss_col]], NA_character_, "failed pseudocount sensitivity")
-    } else NA_character_
+    # The sensitivity analysis re-runs ANCOM-BC2 with pseudocounts 0.1, 0.5 and 1
+    # added to zeros; passed_ss says whether the call survives. ANCOMBC's own robust
+    # call, diff_robust, is q < alpha AND passed_ss, and its vignette strongly
+    # recommends using it for the final call. It is carried as a column so ap_da()
+    # can apply it; before 2026-09-18 it was only a note, and 145 of 146 ANCOM-BC2
+    # calls on Baxter were counted although they failed it.
+    ap_assert(ss_col %in% colnames(out),
+              "ancombc2 returned no {ss_col} column, so its calls cannot be checked for robustness.")
+    passed <- as.logical(out[[ss_col]])
+    note <- ifelse(passed %in% FALSE, "failed pseudocount sensitivity", NA_character_)
 
-    ap_da_row(
+    estimated <- ap_da_row(
       feature = out$taxon, method = "ancombc2", contrast = contrast,
       effect = out[[lc]], effect_scale = "log fold change (natural log)",
       se = out[[paste0("se_", suffix)]],
       statistic = out[[paste0("W_", suffix)]],
       p = out[[paste0("p_", suffix)]],
       p_adj = out[[paste0("q_", suffix)]],
-      note = note
+      note = note,
+      passed_sensitivity = passed
     )
+    rbind(estimated, ap_da_ancombc2_structural(zi, out$taxon, group, contrast, reference))
   }))
+}
+
+# Rows for the taxa ancombc2 set aside as structural zeros. For the contrast level vs
+# reference: absent from the reference only means higher in the level (+1), absent from
+# the level only means lower (-1). Absent from both, or from some other group only, gives
+# no call for this contrast, and says so.
+#' @keywords internal
+ap_da_ancombc2_structural <- function(zi, estimated, group, level, reference) {
+  if (is.null(zi) || nrow(zi) == 0L) return(NULL)
+  z <- zi[!zi$taxon %in% estimated, , drop = FALSE]
+  if (nrow(z) == 0L) return(NULL)
+  col_of <- function(lv) paste0("structural_zero (", group, " = ", lv, ")")
+  ap_assert(all(c(col_of(level), col_of(reference)) %in% names(z)),
+            "ancombc2's zero_ind has no column for {level} or {reference}; cannot place its structural zeros.")
+  in_lv <- as.logical(z[[col_of(level)]])
+  in_ref <- as.logical(z[[col_of(reference)]])
+  dirn <- ifelse(in_ref & !in_lv, 1, ifelse(in_lv & !in_ref, -1, NA_real_))
+  note <- ifelse(dirn %in% 1, paste0("structural zero: absent from ", reference),
+          ifelse(dirn %in% -1, paste0("structural zero: absent from ", level),
+                 "structural zero in another group; not estimated for this contrast"))
+  ap_da_row(
+    feature = z$taxon, method = "ancombc2", contrast = level,
+    effect = NA_real_, effect_scale = "log fold change (natural log)",
+    se = NA_real_, statistic = NA_real_, p = NA_real_, p_adj = NA_real_,
+    note = note, structural_zero = !is.na(dirn), direction = dirn
+  )
 }
 
 #' @keywords internal

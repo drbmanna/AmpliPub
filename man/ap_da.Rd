@@ -53,3 +53,23 @@ feature per method) and the settings used.
 Runs one or more differential abundance methods on a common, pre-filtered
 feature set and returns a single result frame.
 }
+\section{What counts as significant}{
+
+A feature is significant for a method when its adjusted p-value is below
+\code{alpha} and, for ANCOM-BC2, it also passed ANCOM-BC2's pseudocount sensitivity
+analysis. That analysis re-runs the method with pseudocounts added to zeros; a
+call that changes is sensitive to how zeros are handled. ANCOMBC calls the
+combined criterion \code{diff_robust} and recommends it for the final call. Calls
+that failed are kept in \code{results} with \code{failed_sensitivity = TRUE} and a note,
+counted in the print, and not counted as significant. Sparse features fail most
+often: ANCOM-BC2 estimates from the non-zero counts by default, and whether a
+feature differs where present is a different question from whether it differs
+overall.
+
+ANCOM-BC2 also detects structural zeros: a taxon absent, or nearly so, from every
+sample of one group (ANCOM-II's criteria, with the lower-bound criterion when every
+group has more than 30 samples). ANCOM-BC2 declares such a taxon differentially
+abundant without estimating an effect. It is kept with \code{structural_zero = TRUE}, a
+\code{direction} from which group lacks it, no effect or p-value, and counted as a call.
+}
+

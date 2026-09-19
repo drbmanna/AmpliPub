@@ -4,7 +4,12 @@
 \alias{ap_ordination_legend}
 \title{Legend text for a publication ordination}
 \usage{
-ap_ordination_legend(ord, permanova = NULL, group = NULL)
+ap_ordination_legend(
+  ord,
+  permanova = NULL,
+  group = NULL,
+  pub = ap_pub_options()
+)
 }
 \arguments{
 \item{ord}{An \code{ap_ordination} from \code{\link[=ap_ordinate]{ap_ordinate()}}.}
@@ -12,6 +17,8 @@ ap_ordination_legend(ord, permanova = NULL, group = NULL)
 \item{permanova}{An \code{ap_permanova} result, or \code{NULL}.}
 
 \item{group}{The term tested.}
+
+\item{pub}{\code{\link[=ap_pub_options]{ap_pub_options()}}, for the group names in the pairwise lines.}
 }
 \value{
 A character vector, one line per entry.

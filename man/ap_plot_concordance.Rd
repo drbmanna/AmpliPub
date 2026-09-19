@@ -4,12 +4,25 @@
 \alias{ap_plot_concordance}
 \title{Concordance between methods}
 \usage{
-ap_plot_concordance(concordance, max_features = 40L)
+ap_plot_concordance(
+  concordance,
+  max_features = 40L,
+  publication = FALSE,
+  pub = ap_pub_options()
+)
 }
 \arguments{
 \item{concordance}{An \code{ap_da_concordance} result from \code{\link[=ap_da_concordance]{ap_da_concordance()}}.}
 
 \item{max_features}{Cap on features drawn. Default \code{40}.}
+
+\item{publication}{Draw the publication version: one dot per method that
+called a feature, coloured by direction and sized by -log10 q, a small grey
+dot where the method tested it and found nothing, and an open circle where
+an ANCOM-BC2 call failed its sensitivity analysis. Features sharing a genus
+are told apart by a short ASV ID. Settings go to \code{\link[=ap_da_legend]{ap_da_legend()}}.}
+
+\item{pub}{\code{\link[=ap_pub_options]{ap_pub_options()}} for \code{publication = TRUE}.}
 }
 \value{
 A ggplot object.

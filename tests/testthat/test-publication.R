@@ -196,3 +196,399 @@ test_that("the panel statistics parse, including a missing dispersion test", {
   for (t in lines) expect_silent(parse(text = t))
   expect_null(ap_permanova_plotmath(pn, "m", "other"))
 })
+
+test_that("the publication dispersion carries both tests on the panel, not the verdict", {
+  skip_pub()
+  f <- ord_fixture()
+  p <- ap_plot_dispersion(f$pn, metric = "bray_curtis", term = "group", publication = TRUE,
+                          pub = ap_pub_options(labels = list(group = "Arm")))
+  expect_null(p$labels$subtitle)
+  expect_null(p$labels$caption)
+  grobs <- lapply(Filter(function(l) inherits(l$geom, "GeomCustomAnn"), p$layers),
+                  function(l) l$geom_params$grob)
+  txt <- vapply(grobs, function(g) paste(deparse(g$label), collapse = ""), character(1))
+  # PERMANOVA on top, then betadisper, then the spread ratio.
+  expect_length(txt, 3)
+  expect_match(txt[1], "PERMANOVA", fixed = TRUE)
+  expect_match(txt[1], "italic(R)^2", fixed = TRUE)
+  expect_match(txt[2], "betadisper", fixed = TRUE)
+  expect_match(txt[3], "spread ratio", fixed = TRUE)
+  # Baselines 2.8 mm apart, as on the publication ordination.
+  ys <- vapply(grobs, function(g) grid::convertY(grid::unit(1, "npc") - g$y, "mm", valueOnly = TRUE),
+               numeric(1))
+  expect_equal(unname(diff(ys)), c(2.8, 2.8))
+  verdicts <- f$pn$interpretation$verdict
+  expect_false(any(vapply(verdicts, function(v) any(grepl(v, txt, ignore.case = TRUE)), logical(1))))
+  expect_true(all(vapply(grobs, function(g) is.call(g$label), logical(1))))
+  expect_equal(unname(vapply(grobs, function(g) g$gp$fontsize, numeric(1))), c(6, 6, 6))
+  expect_equal(as.character(p$labels$x), "Arm")
+  size <- attr(p, "ap_pub_size")
+  expect_equal(size$width, "single")
+  expect_true(size$height >= 50 && size$height <= 247)
+  # The report figure is unchanged: it still carries a subtitle.
+  expect_false(is.null(ap_plot_dispersion(f$pn, "bray_curtis", "group")$labels$subtitle))
+  expect_silent(ggplot2::ggplot_build(p))
+})
+
+test_that("the dispersion legend carries the method note and the verdict", {
+  f <- ord_fixture()
+  leg <- ap_dispersion_legend(f$pn, "bray_curtis", "group")
+  expect_match(leg[1], "^Distance from each sample to its group centroid on bray_curtis")
+  expect_true(any(grepl("PERMANOVA assumes", leg)))
+  expect_true(any(startsWith(leg, "betadisper: F = ")))
+  expect_true(any(grepl(paste0("^Verdict: ", f$pn$interpretation$verdict[1]), leg)))
+})
+
+test_that("the dispersion panel statistics parse, and are dropped when betadisper is missing", {
+  pn <- list(results = data.frame(metric = "m", term = "t", R2 = 0.006, pseudo_F = 1.5, p = 0.005),
+             dispersion = data.frame(metric = "m", term = "t", dispersion_F = 3.6,
+                                     dispersion_p = 0.034, max_centroid_ratio = 1.04))
+  lines <- ap_dispersion_plotmath(pn, "m", "t")
+  expect_length(lines, 3)
+  expect_match(lines[1], "PERMANOVA", fixed = TRUE)
+  expect_match(lines[3], "1.04", fixed = TRUE)
+  for (t in lines) expect_silent(parse(text = t))
+  pn$dispersion$dispersion_p <- NA_real_
+  expect_null(ap_dispersion_plotmath(pn, "m", "t"))
+})
+
+test_that("publication taxon labels drop the rank prefix and keep every suffix", {
+  lab <- ap_pub_taxon_labels(c("g__Blautia_A_141781", "g__Faecalibacterium",
+                               "f__Lachnospiraceae (unassigned genus)", "Other"))
+  txt <- vapply(lab, function(e) paste(deparse(e), collapse = ""), character(1))
+  expect_equal(unname(txt[1]), "italic(\"Blautia_A_141781\")")
+  expect_equal(unname(txt[2]), "italic(\"Faecalibacterium\")")
+  expect_equal(unname(txt[3]), "italic(\"Lachnospiraceae\") ~ \"(unassigned genus)\"")
+  expect_equal(unname(txt[4]), "\"Other\"")
+  expect_equal(names(lab), c("g__Blautia_A_141781", "g__Faecalibacterium",
+                             "f__Lachnospiraceae (unassigned genus)", "Other"))
+})
+
+test_that("two lineages differing only by a numeric suffix keep distinct labels", {
+  lab <- ap_pub_taxon_labels(c("g__Blautia_A_141780", "g__Blautia_A_141781"))
+  txt <- vapply(lab, function(e) paste(deparse(e), collapse = ""), character(1))
+  expect_equal(anyDuplicated(txt), 0L)
+})
+
+test_that("the label guard fires when removing prefixes would merge two taxa", {
+  expect_error(ap_pub_taxon_labels(c("g__Bacteroides", "f__Bacteroides")),
+               "same label")
+})
+
+test_that("the taxa palette has no greys and grows past twenty colours", {
+  skip_if_not_installed("ggsci")
+  pal <- ap_pub_taxa_palette(30)
+  expect_length(pal, 30L)
+  expect_equal(anyDuplicated(toupper(pal)), 0L)
+  rgb <- grDevices::col2rgb(pal)
+  expect_true(all(apply(rgb, 2, function(z) diff(range(z))) >= 16))
+})
+
+test_that("the publication composition bar shows group means with italic taxa", {
+  skip_pub()
+  x <- ap_fixture_object(tree = FALSE)
+  p <- ap_plot_taxa_bar(x, rank = "genus", n = 3L, group = "group", publication = TRUE)
+  expect_null(p$labels$caption)
+  expect_equal(attr(p, "ap_pub_size")$width, "onehalf")
+  b <- ggplot2::ggplot_build(p)
+  # One stacked bar per group, each summing to 1.
+  sums <- tapply(b$data[[1]]$y - b$data[[1]]$ymin, b$data[[1]]$x, sum)
+  expect_equal(unname(as.vector(sums)), rep(1, length(sums)), tolerance = 1e-8)
+  expect_error(ap_plot_taxa_bar(x, rank = "genus", n = 3L, publication = TRUE),
+               "needs `group`")
+})
+
+test_that("the publication heatmap has one column per group and no Other row", {
+  skip_pub()
+  x <- ap_fixture_object(tree = FALSE)
+  h <- ap_plot_taxa_heatmap(x, rank = "genus", n = 3L, group = "group", publication = TRUE)
+  d <- ggplot2::ggplot_build(h)$data[[1]]
+  n_grp <- length(unique(SummarizedExperiment::colData(x)$group))
+  expect_equal(length(unique(d$x)), n_grp)
+  expect_false("Other" %in% levels(h$data$taxon))
+  expect_equal(nrow(d), n_grp * nlevels(h$data$taxon))
+  expect_equal(h$labels$y, "Genus")
+})
+
+test_that("without a reference each heatmap row is centred on the group average, not scaled", {
+  x <- ap_fixture_object(tree = FALSE)
+  df <- ap_top_taxa(x, n = 3L, group = "group", rank = "genus")
+  m <- ap_taxa_clr_contrast(x, df, "group", "genus", NULL, 0.5)
+  expect_equal(unname(rowSums(m)), rep(0, nrow(m)), tolerance = 1e-10)
+  # Centred only: the spread of a row is the spread of its group means, not 1.
+  clr <- ap_normalize(ap_collapse(x, "genus"), method = "clr", pseudocount = 0.5)
+  g <- SummarizedExperiment::colData(x)$group
+  t1 <- rownames(m)[1]
+  raw <- tapply(clr[t1, ], g[match(colnames(clr), colnames(x))], mean)
+  expect_equal(unname(m[t1, names(raw)]), as.vector(raw - mean(raw)), tolerance = 1e-10)
+})
+
+test_that("with a reference the heatmap shows differences from it and drops its column", {
+  x <- ap_fixture_object(tree = FALSE)
+  df <- ap_top_taxa(x, n = 3L, group = "group", rank = "genus")
+  lv <- sort(unique(as.character(SummarizedExperiment::colData(x)$group)))
+  m0 <- ap_taxa_clr_contrast(x, df, "group", "genus", NULL, 0.5)
+  m1 <- ap_taxa_clr_contrast(x, df, "group", "genus", lv[1], 0.5)
+  expect_false(lv[1] %in% colnames(m1))
+  expect_equal(m1[, lv[2]], m0[, lv[2]] - m0[, lv[1]], tolerance = 1e-10)
+  expect_error(ap_taxa_clr_contrast(x, df, "group", "genus", "no_such_level", 0.5),
+               "must be a level")
+})
+
+test_that("the composition legend states selection, Other's share and group sizes", {
+  x <- ap_fixture_object(tree = FALSE)
+  df <- ap_top_taxa(x, n = 2L, group = "group", rank = "genus")
+  leg <- ap_taxa_legend(x, "genus", "group", n = 2L, type = "bar")
+  expect_match(leg[2], sprintf("(%d taxa)", attr(df, "n_kept")), fixed = TRUE)
+  if (attr(df, "n_pooled") > 0L) {
+    expect_match(leg[3], sprintf("%.1f%%", 100 * attr(df, "pooled_mean_abundance")), fixed = TRUE)
+  }
+  expect_match(leg[5], "^n = ")
+  expect_match(ap_taxa_legend(x, "genus", "group", n = 2L, type = "heatmap")[1], "average of the group means")
+})
+
+# Differential abundance publication figures ---------------------------------------------------
+
+fake_da <- function() {
+  f <- c("aaaaaa11", "bbbbbb22", "cccccc33", "dddddd44")
+  lab <- c("g__Prevotella", "g__Prevotella", "g__Parvimonas", "f__Lachnospiraceae (unassigned genus)")
+  rows <- expand.grid(i = 1:4, method = c("ancombc2", "linda"), stringsAsFactors = FALSE)
+  r <- data.frame(feature = f[rows$i], method = rows$method, contrast = "b_vs_a",
+                  effect = c(1.2, -0.8, 2, 0.1, 1.1, -0.1, 1.5, 0.05),
+                  effect_scale = ifelse(rows$method == "ancombc2", "log fold change (natural log)",
+                                        "log2 fold change"),
+                  se = 0.2, statistic = 5, p = 1e-4,
+                  p_adj = c(1e-4, 1e-3, 1e-8, 0.6, 1e-3, 0.5, 1e-5, 0.9),
+                  note = NA_character_, stringsAsFactors = FALSE)
+  r$passed_sensitivity <- ifelse(r$method == "ancombc2", c(FALSE, TRUE, TRUE, TRUE), NA)
+  below <- r$p_adj < 0.05
+  r$failed_sensitivity <- below & r$passed_sensitivity %in% FALSE
+  r$significant <- below & !r$failed_sensitivity
+  r$prevalence <- 0.5
+  r$taxon_label <- lab[rows$i]
+  structure(list(results = r, group = "group", reference = "a", levels = c("a", "b"),
+                 methods = c("ancombc2", "linda"), skipped = character(0), prv_cut = 0.1,
+                 alpha = 0.05, p_adj_method = "BH", n_features = 4L, n_samples = 20L),
+            class = "ap_da")
+}
+
+test_that("ASVs sharing a genus get a short ID, others keep the plain label", {
+  lab <- ap_da_feature_labels(c("aaaaaa11", "bbbbbb22", "cccccc33"),
+                              c("g__Prevotella", "g__Prevotella", "g__Parvimonas"))
+  expect_equal(lab, c("g__Prevotella (ASV aaaaaa)", "g__Prevotella (ASV bbbbbb)", "g__Parvimonas"))
+  expect_error(ap_da_feature_labels(c("aaaaaa11", "aaaaaa22"), c("g__X", "g__X")), "not unique")
+})
+
+test_that("publication feature labels italicise the name and keep notes upright", {
+  e <- ap_pub_feature_expr(c("g__Prevotella (ASV aaaaaa)", "f__Lachnospiraceae (unassigned genus)",
+                             "g__Parvimonas"))
+  txt <- vapply(e, function(x) paste(deparse(x), collapse = ""), character(1))
+  expect_equal(unname(txt), c("italic(\"Prevotella\") ~ \"(ASV aaaaaa)\"",
+                              "italic(\"Lachnospiraceae\") ~ \"(unassigned genus)\"",
+                              "italic(\"Parvimonas\")"))
+})
+
+test_that("the publication concordance has a row per called feature, fragile calls as open circles", {
+  skip_pub()
+  da <- fake_da()
+  cc <- ap_da_concordance(da)
+  p <- ap_plot_concordance(cc, publication = TRUE)
+  # Called by some method: aaaa (linda), bbbb (ancombc2), cccc (both). dddd by none.
+  expect_setequal(unique(as.character(p$data$feature)), c("aaaaaa11", "bbbbbb22", "cccccc33"))
+  fail <- p$data[p$data$kind == "Failed sensitivity analysis", ]
+  expect_equal(fail$feature, "aaaaaa11")
+  # A structural zero is drawn as a triangle coloured by its direction.
+  da2 <- fake_da()
+  sz <- da2$results[1, ]
+  sz$feature <- "eeeeee55"; sz$taxon_label <- "g__Fusobacterium"; sz$effect <- NA
+  sz$p_adj <- NA; sz$p <- NA; sz$failed_sensitivity <- FALSE; sz$passed_sensitivity <- NA
+  sz$significant <- TRUE
+  da2$results$structural_zero <- FALSE
+  da2$results$direction <- sign(da2$results$effect)
+  sz$structural_zero <- TRUE; sz$direction <- 1
+  da2$results <- rbind(da2$results, sz)
+  p2 <- ap_plot_concordance(ap_da_concordance(da2), publication = TRUE)
+  tri <- p2$data[p2$data$kind == "Absent from one group", ]
+  expect_equal(tri$feature, "eeeeee55")
+  expect_equal(tri$colour, "Enriched")
+  expect_silent(ggplot2::ggplot_build(p2))
+  expect_silent(ggplot2::ggplot_build(p))
+  expect_equal(attr(p, "ap_pub_size")$width, "single")
+})
+
+test_that("the publication volcano titles each panel with its scale, without nested brackets", {
+  skip_pub()
+  v <- ap_plot_volcano(fake_da(), publication = TRUE)
+  expect_true(all(grepl("^(ANCOM-BC2|LinDA)\n[(]", levels(v$data$panel))))
+  expect_false(any(grepl("[(].*[(]", levels(v$data$panel))))
+  expect_equal(attr(v, "ap_pub_size")$width, "double")
+  expect_silent(ggplot2::ggplot_build(v))
+})
+
+test_that("the DA legend states counts, the failed-sensitivity number and full IDs", {
+  cc <- ap_da_concordance(fake_da())
+  leg <- ap_da_legend(cc, "concordance")
+  expect_true(any(grepl("Called: ANCOM-BC2 2, LinDA 2.", leg, fixed = TRUE)))
+  expect_true(any(grepl("^1 ANCOM-BC2 call had adjusted p < 0.05 but failed", leg)))
+  expect_true(any(grepl("g__Prevotella (ASV aaaaaa) = aaaaaa11", leg, fixed = TRUE)))
+})
+
+# Primary-method figure ---------------------------------------------------------------------------
+
+# n enriched and n depleted ANCOM-BC2 calls with distinct effects, for the per-direction cap.
+many_calls_da <- function(n = 30L) {
+  f <- sprintf("f%03d%s", seq_len(2L * n), strrep("0", 30))
+  eff <- c(seq(0.5, 3, length.out = n), -seq(0.5, 3, length.out = n))
+  r <- data.frame(feature = f, method = "ancombc2", contrast = "b_vs_a", effect = eff,
+                  effect_scale = "log fold change (natural log)", se = 0.1, statistic = 5,
+                  p = 1e-4, p_adj = 1e-3, note = NA_character_, passed_sensitivity = TRUE,
+                  failed_sensitivity = FALSE, significant = TRUE, prevalence = 0.5,
+                  taxon_label = sprintf("g__G%03d", seq_len(2L * n)), stringsAsFactors = FALSE)
+  structure(list(results = r, group = "group", reference = "a", levels = c("a", "b"),
+                 methods = "ancombc2", skipped = character(0), prv_cut = 0.1, alpha = 0.05,
+                 p_adj_method = "BH", n_features = 2L * n, n_samples = 20L), class = "ap_da")
+}
+
+test_that("the primary figure draws only the primary method's robust calls, enriched first", {
+  skip_pub()
+  cc <- ap_da_concordance(fake_da())
+  p <- ap_plot_da_primary(cc, "ancombc2")
+  # ancombc2 called cccc (+2) and bbbb (-0.8); aaaa failed its sensitivity analysis.
+  expect_equal(p$data$feature, c("cccccc33", "bbbbbb22"))
+  expect_true(p$data$y[p$data$feature == "cccccc33"] > p$data$y[p$data$feature == "bbbbbb22"])
+  heads <- attr(p, "ap_heads")
+  expect_equal(heads$text, c("Enriched in b", "Depleted in b"))
+  # Enriched heading right-aligned at the right edge, depleted left-aligned at the left.
+  expect_equal(heads$x, c(Inf, -Inf))
+  expect_equal(heads$hjust, c(1, 0))
+  # Headings sit on their own rows, above each block.
+  expect_equal(heads$y[1], max(p$data$y[p$data$direction > 0]) + 1)
+  expect_equal(heads$y[2], max(p$data$y[p$data$direction < 0]) + 1)
+  expect_silent(ggplot2::ggplot_build(p))
+  expect_equal(attr(p, "ap_pub_size")$width, "single")
+})
+
+test_that("the primary figure's interval is estimate +/- 1.96 SE", {
+  skip_pub()
+  p <- ap_plot_da_primary(ap_da_concordance(fake_da()), "ancombc2")
+  bars <- ggplot2::layer_data(p, 3L)
+  z <- stats::qnorm(0.975)
+  expect_equal(sort(bars$xmin), sort(c(2, -0.8) - z * 0.2))
+  expect_equal(sort(bars$xmax), sort(c(2, -0.8) + z * 0.2))
+})
+
+test_that("the primary figure keeps the 25 largest effects in each direction", {
+  skip_pub()
+  cc <- ap_da_concordance(many_calls_da(30L))
+  p <- ap_plot_da_primary(cc, "ancombc2")
+  expect_equal(sum(p$data$direction > 0), 25L)
+  expect_equal(sum(p$data$direction < 0), 25L)
+  # The five smallest effects in each direction (0.5 upward) are the ones left out.
+  expect_equal(min(abs(p$data$effect)), sort(seq(0.5, 3, length.out = 30))[6])
+  expect_equal(unname(attr(p, "ap_n_called")), c(30L, 30L))
+  leg <- ap_da_legend(cc, "primary", "ancombc2")
+  expect_true(any(grepl("the 25 largest of 30 enriched and 25 largest of 30 depleted calls in b",
+                        leg, fixed = TRUE)))
+  expect_equal(nrow(ap_plot_da_primary(cc, "ancombc2", max_features = 3L)$data), 6L)
+})
+
+test_that("the primary figure refuses what it cannot draw honestly", {
+  skip_pub()
+  cc <- ap_da_concordance(fake_da())
+  expect_error(ap_plot_da_primary(cc, "maaslin2"), "one of the methods that ran")
+  # A primary method that called nothing has no figure.
+  da <- fake_da()
+  da$results$significant[da$results$method == "linda"] <- FALSE
+  expect_error(ap_plot_da_primary(ap_da_concordance(da), "linda"), "called no feature")
+  # ALDEx2's stored se is diff.win, a dispersion; no interval can be built from it.
+  da2 <- fake_da()
+  da2$results$method[da2$results$method == "linda"] <- "aldex2"
+  da2$methods <- c("ancombc2", "aldex2")
+  expect_error(ap_plot_da_primary(ap_da_concordance(da2), "aldex2"), "diff.win")
+  # The abundance view is for a few chosen calls, and only calls.
+  expect_error(ap_plot_da_primary(cc, type = "abundance"), "1 to 8 feature IDs")
+  expect_error(ap_plot_da_primary(cc, features = "aaaaaa11"), "not called by ANCOM-BC2")
+})
+
+test_that("the primary legend states the method, interval, robust rule and what is shown", {
+  cc <- ap_da_concordance(fake_da())
+  leg <- ap_da_legend(cc, "primary", "ancombc2")
+  expect_true(any(grepl("^Primary method ANCOM-BC2[.] Points: log fold change [(]natural log[)]", leg)))
+  expect_true(any(grepl("1.96 SE, not adjusted for multiple testing", leg, fixed = TRUE)))
+  expect_true(any(grepl("1 with adjusted p < 0.05 did not and is not shown.", leg, fixed = TRUE)))
+  expect_true(any(grepl("All 2 calls shown (1 enriched, 1 depleted in b).", leg, fixed = TRUE)))
+  expect_false(any(grepl("g__", leg)))
+})
+
+test_that("the abundance view uses the object DA ran on and counts detections per group", {
+  skip_pub()
+  x <- ap_fixture_object()
+  counts <- SummarizedExperiment::assay(x, "counts")
+  r <- data.frame(feature = c("ASV01", "ASV02"), method = "ancombc2", contrast = "b_vs_a",
+                  effect = c(2, 1.5), effect_scale = "log fold change (natural log)", se = 0.2,
+                  statistic = 5, p = 1e-4, p_adj = 1e-3, note = NA_character_,
+                  passed_sensitivity = TRUE, failed_sensitivity = FALSE, significant = TRUE,
+                  prevalence = 1, taxon_label = c("g__Genus01", "g__Genus02"),
+                  stringsAsFactors = FALSE)
+  da <- structure(list(results = r, group = "group", reference = "a", levels = c("a", "b"),
+                       methods = "ancombc2", skipped = character(0), prv_cut = 0.1,
+                       alpha = 0.05, p_adj_method = "BH", n_features = nrow(counts),
+                       n_samples = ncol(counts)), class = "ap_da")
+  cc <- ap_da_concordance(da)
+  p <- ap_plot_da_primary(cc, type = "abundance", x = x, features = c("ASV01", "ASV02"))
+  expect_silent(ggplot2::ggplot_build(p))
+  # Relative abundance in percent, from all features' counts in each sample.
+  v <- p$data$value[p$data$feature == "ASV01"]
+  expect_equal(sort(v), sort(100 * counts["ASV01", ] / colSums(counts)), ignore_attr = TRUE)
+  det <- ggplot2::layer_data(p, 3L)$label
+  expect_true(all(grepl("^[0-9]+/12$", det)))
+  # The wrong object is refused rather than drawn.
+  expect_error(ap_plot_da_primary(cc, type = "abundance", x = x[, 1:10], features = "ASV01"),
+               "Pass the object")
+})
+
+# Level labels ---------------------------------------------------------------------------------
+
+test_that("level_labels rename levels exactly, and unlisted levels are capitalized", {
+  pub <- ap_pub_options(level_labels = list(cancer = "CRC", normal = "healthy"))
+  f <- ap_pub_levels(factor(c("normal", "cancer", "adenoma")), pub)
+  # Renamed levels are shown as written ("healthy" stays lower case); the rest capitalized.
+  expect_equal(levels(f), c("Adenoma", "CRC", "healthy"))
+  expect_equal(as.character(f), c("healthy", "CRC", "Adenoma"))
+  expect_equal(ap_pub_level_text(c("cancer", "adenoma"), pub), c("CRC", "adenoma"))
+  expect_equal(ap_pub_level_text("cancer", NULL), "cancer")
+  expect_error(ap_pub_options(level_labels = list("CRC")), "named list")
+  expect_error(ap_pub_options(level_labels = list(cancer = "")), "non-empty")
+  # Two levels renamed to one name would silently merge two groups.
+  expect_error(ap_pub_options(level_labels = list(cancer = "Case", adenoma = "Case")),
+               "same name")
+  # A label that collides with another level's capitalized name is caught at draw time.
+  expect_error(ap_pub_levels(factor(c("cancer", "normal")),
+                             ap_pub_options(level_labels = list(cancer = "Normal"))),
+               "same name")
+})
+
+test_that("the DA figures and legends use the level labels", {
+  skip_pub()
+  pub <- ap_pub_options(level_labels = list(b = "Tumour", a = "Control"))
+  cc <- ap_da_concordance(fake_da())
+  p <- ap_plot_da_primary(cc, "ancombc2", pub = pub)
+  expect_equal(attr(p, "ap_heads")$text, c("Enriched in Tumour", "Depleted in Tumour"))
+  expect_match(p$labels$x, "Tumour vs Control$")
+  for (type in c("primary", "concordance", "volcano")) {
+    leg <- ap_da_legend(cc, type, pub = pub)
+    expect_equal(leg[1], "Contrast: Tumour vs Control (reference Control). 4 features tested in 20 samples.")
+  }
+  # Without labels the metadata values are used as they are.
+  expect_equal(ap_da_legend(cc, "primary")[1],
+               "Contrast: b vs a (reference a). 4 features tested in 20 samples.")
+})
+
+test_that("pairwise PERMANOVA legend lines use the level labels", {
+  pw <- data.frame(metric = "bray_curtis", term = "dx", group1 = "adenoma", group2 = "cancer",
+                   R2 = 0.01, pseudo_F = 2, p = 0.01, p_adj = 0.02, stringsAsFactors = FALSE)
+  perm <- list(pairwise = pw)
+  out <- ap_pairwise_lines(perm, "bray_curtis", "dx",
+                           ap_pub_options(level_labels = list(cancer = "CRC")))
+  expect_match(out[2], "^  adenoma vs CRC: ")
+})

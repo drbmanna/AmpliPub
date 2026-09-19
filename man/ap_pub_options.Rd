@@ -4,7 +4,12 @@
 \alias{ap_pub_options}
 \title{Options for publication figures}
 \usage{
-ap_pub_options(palette = "npg", labels = list(), capitalize_levels = TRUE)
+ap_pub_options(
+  palette = "npg",
+  labels = list(),
+  capitalize_levels = TRUE,
+  level_labels = list()
+)
 }
 \arguments{
 \item{palette}{ggsci palette, see \code{\link[=ap_pub_palette]{ap_pub_palette()}}. Default \code{"npg"}.}
@@ -13,7 +18,13 @@ ap_pub_options(palette = "npg", labels = list(), capitalize_levels = TRUE)
 \code{list(dx = "Diagnosis")}. A variable not listed is shown by its name.}
 
 \item{capitalize_levels}{Capitalize the first letter of group levels on the
-axis ("adenoma" becomes "Adenoma"). Default \code{TRUE}.}
+axis ("adenoma" becomes "Adenoma"). Default \code{TRUE}. Does not touch a level
+renamed in \code{level_labels}, which is shown exactly as written.}
+
+\item{level_labels}{Named list mapping group levels, as they appear in the
+metadata, to the names the figures and legends show, e.g.
+\code{list(cancer = "CRC", normal = "Healthy")}. A level not listed keeps its
+metadata value. Two levels may not share a name.}
 }
 \value{
 An \code{ap_pub_options} list.

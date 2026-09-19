@@ -185,9 +185,10 @@ ap_permanova_plotmath <- function(pn, metric, term) {
 #' @param ord An `ap_ordination` from [ap_ordinate()].
 #' @param permanova An `ap_permanova` result, or `NULL`.
 #' @param group The term tested.
+#' @param pub [ap_pub_options()], for the group names in the pairwise lines.
 #' @return A character vector, one line per entry.
 #' @export
-ap_ordination_legend <- function(ord, permanova = NULL, group = NULL) {
+ap_ordination_legend <- function(ord, permanova = NULL, group = NULL, pub = ap_pub_options()) {
   out <- c(paste0(ap_ord_subtitle(ord), "."), ap_ord_caption(ord))
   if (!is.null(permanova) && !is.null(group)) {
     r <- permanova$results[permanova$results$metric == ord$metric &
@@ -203,8 +204,23 @@ ap_ordination_legend <- function(ord, permanova = NULL, group = NULL) {
     if (nrow(v) > 0L) {
       out <- c(out, paste0("Verdict: ", v$verdict[1], ". ", v$interpretation[1]))
     }
+    out <- c(out, ap_pairwise_lines(permanova, ord$metric, group, pub))
   }
   out
+}
+
+# One legend line per pairwise PERMANOVA comparison for a metric and term, or
+# nothing when the term has fewer than three groups (no pairwise was run).
+#' @keywords internal
+ap_pairwise_lines <- function(permanova, metric, term, pub = NULL) {
+  pw <- permanova$pairwise
+  if (is.null(pw)) return(NULL)
+  pw <- pw[pw$metric == metric & pw$term == term, , drop = FALSE]
+  if (nrow(pw) == 0L) return(NULL)
+  c("Pairwise PERMANOVA (FDR-adjusted within this comparison):",
+    sprintf("  %s vs %s: R2 = %.4f, pseudo-F = %.2f, p = %s, adjusted p = %s.",
+            ap_pub_level_text(pw$group1, pub), ap_pub_level_text(pw$group2, pub), pw$R2, pw$pseudo_F,
+            format.pval(pw$p, digits = 2), format.pval(pw$p_adj, digits = 2)))
 }
 
 #' @keywords internal
@@ -253,10 +269,16 @@ ap_permanova_label <- function(pn, metric, term) {
 #' @param permanova An `ap_permanova` result from [ap_permanova()].
 #' @param metric Which metric to plot. Defaults to the first.
 #' @param term Which term to plot. Defaults to the first.
+#' @param publication Draw the publication version: no subtitle or caption,
+#'   [ap_theme_pub()], ggsci colours, and the betadisper statistics on the panel
+#'   as plotmath. The method note and the PERMANOVA verdict go to the legend text
+#'   from [ap_dispersion_legend()]. Default `FALSE`.
+#' @param pub [ap_pub_options()] for `publication = TRUE`.
 #'
 #' @return A ggplot object.
 #' @export
-ap_plot_dispersion <- function(permanova, metric = NULL, term = NULL) {
+ap_plot_dispersion <- function(permanova, metric = NULL, term = NULL,
+                               publication = FALSE, pub = ap_pub_options()) {
   ap_assert(inherits(permanova, "ap_permanova"),
             "`permanova` must come from `ap_permanova()`, not {class(permanova)[1]}.")
   metric <- metric %||% permanova$metrics[1]
@@ -278,6 +300,10 @@ ap_plot_dispersion <- function(permanova, metric = NULL, term = NULL) {
   set.seed(permanova$seed)
   bd <- vegan::betadisper(d, g)
   df <- data.frame(distance = bd$distances, grp = bd$group, stringsAsFactors = FALSE)
+
+  if (publication) {
+    return(ap_plot_dispersion_pub(df, permanova, metric, term, pub))
+  }
 
   disp <- permanova$dispersion[permanova$dispersion$metric == metric &
                                  permanova$dispersion$term == term, ]
@@ -306,4 +332,97 @@ ap_plot_dispersion <- function(permanova, metric = NULL, term = NULL) {
                                colour = "grey20", lineheight = 0.95)
   }
   p
+}
+
+# The publication dispersion. Same treatment as the publication ordination: the
+# statistics stay on the panel where the reader looks for them, and the method
+# note and PERMANOVA verdict move to the legend text (ap_dispersion_legend()).
+#' @keywords internal
+ap_plot_dispersion_pub <- function(df, permanova, metric, term, pub) {
+  ap_assert(inherits(pub, "ap_pub_options"), "`pub` must come from `ap_pub_options()`.")
+  df$grp <- ap_pub_levels(df$grp, pub)
+  cols <- ap_pub_palette(nlevels(df$grp), pub$palette)
+
+  p <- ggplot2::ggplot(df, ggplot2::aes(x = .data$grp, y = .data$distance,
+                                        fill = .data$grp)) +
+    ggplot2::geom_boxplot(alpha = 0.6, linewidth = 0.3, colour = "grey25",
+                          outlier.shape = NA) +
+    ggplot2::geom_jitter(width = 0.15, height = 0, size = 0.6, alpha = 0.5,
+                         colour = "black", stroke = 0) +
+    ggplot2::scale_fill_manual(values = cols, guide = "none") +
+    ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0.05, 0.30))) +
+    ggplot2::labs(x = ap_pub_label(term, pub), y = "Distance to group centroid") +
+    ap_theme_pub()
+
+  lines <- ap_dispersion_plotmath(permanova, metric, term)
+  if (!is.null(lines)) {
+    # One grob per line, since plotmath has no line break. Baselines a fixed
+    # 2.8 mm apart, as on the publication ordination.
+    for (i in seq_along(lines)) {
+      grob <- grid::textGrob(
+        parse(text = lines[i])[[1]],
+        x = grid::unit(1.5, "mm"), y = grid::unit(1, "npc") - grid::unit(3 + 2.8 * (i - 1), "mm"),
+        hjust = 0, vjust = 0,
+        gp = grid::gpar(fontsize = ap_pub_stat_pt, fontfamily = "Arial", col = "black"))
+      p <- p + ggplot2::annotation_custom(grob)
+    }
+  }
+  # A single boxplot panel at one column, the height fixed like the alpha panels.
+  attr(p, "ap_pub_size") <- list(width = "single", height = 60)
+  p
+}
+
+# The two tests the dispersion figure exists to compare, plus the spread ratio,
+# as three plotmath lines: PERMANOVA on top (a location shift), betadisper below
+# (a spread difference), so a reader sees both before reading the boxes. The
+# statistic symbols are italic and the multiplication sign is a real glyph.
+#' @keywords internal
+ap_dispersion_plotmath <- function(pn, metric, term) {
+  d <- pn$dispersion[pn$dispersion$metric == metric & pn$dispersion$term == term, ]
+  if (nrow(d) == 0L || is.na(d$dispersion_p[1])) return(NULL)
+  pv <- function(p) format.pval(p, digits = 2)
+  r <- pn$results[pn$results$metric == metric & pn$results$term == term, ]
+  perm <- if (nrow(r) > 0L) {
+    sprintf("'PERMANOVA:' ~ italic(R)^2 == '%.4f' * ',' ~ italic(F) == '%.2f' * ',' ~ italic(p) == '%s'",
+            r$R2[1], r$pseudo_F[1], pv(r$p[1]))
+  }
+  c(perm,
+    sprintf("'betadisper:' ~ italic(F) == '%.2f' * ',' ~ italic(p) == '%s'",
+            d$dispersion_F[1], pv(d$dispersion_p[1])),
+    sprintf("'spread ratio' ~ '%.2f×'", d$max_centroid_ratio[1]))
+}
+
+#' Legend text for a publication dispersion figure
+#'
+#' What [ap_plot_dispersion()] leaves off the publication panel: what the
+#' distances are, the note that PERMANOVA assumes equal dispersion, and the
+#' betadisper result with the PERMANOVA verdict and its reasoning.
+#'
+#' @param permanova An `ap_permanova` result from [ap_permanova()].
+#' @param metric Which metric. Defaults to the first.
+#' @param term Which term. Defaults to the first.
+#' @param pub [ap_pub_options()], for the group names in the pairwise lines.
+#' @return A character vector, one line per entry.
+#' @export
+ap_dispersion_legend <- function(permanova, metric = NULL, term = NULL, pub = ap_pub_options()) {
+  ap_assert(inherits(permanova, "ap_permanova"),
+            "`permanova` must come from `ap_permanova()`, not {class(permanova)[1]}.")
+  metric <- metric %||% permanova$metrics[1]
+  term <- term %||% permanova$terms[1]
+  out <- c(sprintf("Distance from each sample to its group centroid on %s, the quantity betadisper tests.",
+                   metric),
+           "PERMANOVA assumes groups have equal dispersion, so a location shift and a spread difference are read together unless this figure separates them.")
+  d <- permanova$dispersion[permanova$dispersion$metric == metric &
+                              permanova$dispersion$term == term, ]
+  if (nrow(d) > 0L && !is.na(d$dispersion_p[1])) {
+    out <- c(out, sprintf("betadisper: F = %.3f, p = %s, spread differs by %.2fx between groups.",
+                          d$dispersion_F[1], format.pval(d$dispersion_p[1], digits = 2),
+                          d$max_centroid_ratio[1]))
+  }
+  v <- permanova$interpretation[permanova$interpretation$metric == metric &
+                                  permanova$interpretation$term == term, ]
+  if (nrow(v) > 0L) {
+    out <- c(out, paste0("Verdict: ", v$verdict[1], ". ", v$interpretation[1]))
+  }
+  c(out, ap_pairwise_lines(permanova, metric, term, pub))
 }

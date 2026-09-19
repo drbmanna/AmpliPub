@@ -11,6 +11,7 @@ ap_permanova(
   permutations = 999L,
   by = c("margin", "terms"),
   strata = NULL,
+  pairwise = TRUE,
   seed = 1L
 )
 }
@@ -30,12 +31,19 @@ formula order does not matter. \code{"terms"} is sequential and order-dependent.
 \item{strata}{Optional metadata variable to permute within, for a blocked
 design.}
 
+\item{pairwise}{Also run pairwise PERMANOVA between the levels of each
+categorical term with three or more groups, the breakdown the omnibus test
+does not give. Each pair is \code{adonis2} on the distance matrix subset to that
+pair, FDR-adjusted within the term (as MicrobiomeAnalystR does). Default
+\code{TRUE}. With two groups the omnibus already is the pairwise test.}
+
 \item{seed}{Random seed, recorded with the result.}
 }
 \value{
 An object of class \code{ap_permanova}: a list with \code{results} (one row per
 metric per term), \code{dispersion} (one row per metric per categorical term),
-and the settings used.
+\code{pairwise} (one row per metric per term per group pair, or \code{NULL}), and the
+settings used.
 }
 \description{
 Runs \code{vegan::adonis2} across every distance metric in an \code{ap_beta} object,

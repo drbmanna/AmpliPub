@@ -184,16 +184,34 @@ ap_pub_palette <- function(n, name = c("npg", "lancet", "nejm", "jco", "aaas")) 
 #' @param labels Named list mapping metadata variables to axis titles, e.g.
 #'   `list(dx = "Diagnosis")`. A variable not listed is shown by its name.
 #' @param capitalize_levels Capitalize the first letter of group levels on the
-#'   axis ("adenoma" becomes "Adenoma"). Default `TRUE`.
+#'   axis ("adenoma" becomes "Adenoma"). Default `TRUE`. Does not touch a level
+#'   renamed in `level_labels`, which is shown exactly as written.
+#' @param level_labels Named list mapping group levels, as they appear in the
+#'   metadata, to the names the figures and legends show, e.g.
+#'   `list(cancer = "CRC", normal = "Healthy")`. A level not listed keeps its
+#'   metadata value. Two levels may not share a name.
 #' @return An `ap_pub_options` list.
 #' @export
-ap_pub_options <- function(palette = "npg", labels = list(), capitalize_levels = TRUE) {
+ap_pub_options <- function(palette = "npg", labels = list(), capitalize_levels = TRUE,
+                           level_labels = list()) {
   palette <- match.arg(palette, c("npg", "lancet", "nejm", "jco", "aaas"))
   ap_assert(is.list(labels) && (length(labels) == 0L || !is.null(names(labels))),
             "`labels` must be a named list, e.g. list(dx = \"Diagnosis\").")
   ap_assert(isTRUE(capitalize_levels) || isFALSE(capitalize_levels),
             "`capitalize_levels` must be TRUE or FALSE.")
-  structure(list(palette = palette, labels = labels, capitalize_levels = capitalize_levels),
+  ap_assert(is.list(level_labels) &&
+              (length(level_labels) == 0L || (!is.null(names(level_labels)) &&
+                                              all(nzchar(names(level_labels))))),
+            "`level_labels` must be a named list, e.g. list(cancer = \"CRC\").")
+  ap_assert(all(vapply(level_labels, function(v) is.character(v) && length(v) == 1L &&
+                         nzchar(v), logical(1))),
+            "Each entry of `level_labels` must be one non-empty name.")
+  # Two levels renamed to one name would be merged into a single group without a word.
+  shown <- unlist(level_labels)
+  ap_assert(!anyDuplicated(shown),
+            "`level_labels` gives two levels the same name ({paste(unique(shown[duplicated(shown)]), collapse = ', ')}); they would be drawn as one group.")
+  structure(list(palette = palette, labels = labels, capitalize_levels = capitalize_levels,
+                 level_labels = level_labels),
             class = "ap_pub_options")
 }
 
@@ -203,14 +221,32 @@ ap_pub_label <- function(var, pub) {
   if (is.null(lab)) var else as.character(lab)
 }
 
+# Group levels as figure labels: renamed where `level_labels` says so (exactly as written),
+# otherwise capitalized when `capitalize_levels` is set.
 #' @keywords internal
 ap_pub_levels <- function(f, pub) {
   f <- as.factor(f)
-  if (isTRUE(pub$capitalize_levels)) {
-    lv <- levels(f)
-    levels(f) <- paste0(toupper(substr(lv, 1, 1)), substring(lv, 2))
-  }
+  lv <- levels(f)
+  mapped <- pub$level_labels[lv]
+  renamed <- !vapply(mapped, is.null, logical(1))
+  out <- lv
+  if (isTRUE(pub$capitalize_levels)) out <- paste0(toupper(substr(lv, 1, 1)), substring(lv, 2))
+  out[renamed] <- unlist(mapped[renamed])
+  ap_assert(!anyDuplicated(out),
+            "Two groups would be shown with the same name ({paste(unique(out[duplicated(out)]), collapse = ', ')}). Check `level_labels`.")
+  levels(f) <- out
   f
+}
+
+# A group level as it reads inside a sentence (axis titles, headings, legends): the
+# `level_labels` name when there is one, otherwise the metadata value unchanged.
+#' @keywords internal
+ap_pub_level_text <- function(v, pub) {
+  v <- as.character(v)
+  if (is.null(pub) || length(pub$level_labels) == 0L) return(v)
+  hit <- v %in% names(pub$level_labels)
+  v[hit] <- unlist(pub$level_labels[v[hit]])
+  v
 }
 
 # Panel grid for a multi-panel figure: one row up to three panels, then two

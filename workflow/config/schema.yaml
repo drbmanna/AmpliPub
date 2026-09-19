@@ -165,6 +165,13 @@ properties:
         description: Keep only these levels of group for differential abundance. Empty keeps all.
       da_reference: {type: ["string", "null"], default: null}
       da_methods: {type: array, items: {type: string}, default: []}
+      da_primary:
+        type: string
+        enum: ["ancombc2", "linda", "maaslin2"]
+        default: ancombc2
+        description: >-
+          Method drawn in the main-text differential abundance figure. Set it before the run.
+          ALDEx2 is not offered because it reports no standard error for an interval.
       normalizations:
         type: array
         items: {type: string, enum: ["tss", "css", "clr", "rarefy"]}
@@ -189,6 +196,14 @@ properties:
         default: {}
         description: "Axis titles for metadata variables, e.g. {dx: Diagnosis}."
       capitalize_levels: {type: boolean, default: true}
+      level_labels:
+        type: object
+        additionalProperties: {type: string, minLength: 1}
+        default: {}
+        description: >-
+          Names shown for group levels in every publication figure and legend, keyed by the
+          value in the metadata, e.g. {cancer: CRC, normal: Healthy}. Unlisted levels keep
+          their metadata value.
     additionalProperties: false
 
 required: [outdir, envs, threads, fetch, qc, references, classifier, primers, quality, dada2,

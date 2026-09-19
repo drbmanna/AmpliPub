@@ -10,7 +10,9 @@ ap_plot_taxa_bar(
   n = 15L,
   group = NULL,
   mode = c("sample", "group"),
-  order_by = NULL
+  order_by = NULL,
+  publication = FALSE,
+  pub = ap_pub_options()
 )
 }
 \arguments{
@@ -28,6 +30,12 @@ the mean composition per group.}
 
 \item{order_by}{Taxon whose abundance orders the samples within each facet.
 Defaults to the most abundant. Ignored when \code{mode = "group"}.}
+
+\item{publication}{Draw the publication version: mean composition per group,
+rank prefixes removed, taxon names in italics, no caption. Needs \code{group}.
+The caption's content goes to \code{\link[=ap_taxa_legend]{ap_taxa_legend()}} instead.}
+
+\item{pub}{\code{\link[=ap_pub_options]{ap_pub_options()}} for \code{publication = TRUE}.}
 }
 \value{
 A ggplot object.

@@ -32,11 +32,17 @@
 #'   formula order does not matter. `"terms"` is sequential and order-dependent.
 #' @param strata Optional metadata variable to permute within, for a blocked
 #'   design.
+#' @param pairwise Also run pairwise PERMANOVA between the levels of each
+#'   categorical term with three or more groups, the breakdown the omnibus test
+#'   does not give. Each pair is `adonis2` on the distance matrix subset to that
+#'   pair, FDR-adjusted within the term (as MicrobiomeAnalystR does). Default
+#'   `TRUE`. With two groups the omnibus already is the pairwise test.
 #' @param seed Random seed, recorded with the result.
 #'
 #' @return An object of class `ap_permanova`: a list with `results` (one row per
 #'   metric per term), `dispersion` (one row per metric per categorical term),
-#'   and the settings used.
+#'   `pairwise` (one row per metric per term per group pair, or `NULL`), and the
+#'   settings used.
 #' @export
 ap_permanova <- function(beta,
                          terms,
@@ -44,6 +50,7 @@ ap_permanova <- function(beta,
                          permutations = 999L,
                          by = c("margin", "terms"),
                          strata = NULL,
+                         pairwise = TRUE,
                          seed = 1L) {
   ap_assert(inherits(beta, "ap_beta"),
             "`beta` must come from `ap_beta()`, not {class(beta)[1]}.")
@@ -66,6 +73,7 @@ ap_permanova <- function(beta,
 
   res_rows <- list()
   disp_rows <- list()
+  pair_rows <- list()
 
   for (m in metrics) {
     d <- beta$distances[[m]]
@@ -136,6 +144,43 @@ ap_permanova <- function(beta,
         stringsAsFactors = FALSE
       )
     }
+
+    # Pairwise PERMANOVA per categorical term, the breakdown the omnibus test
+    # does not give: which pairs of groups differ. Each pair is adonis2 on the
+    # distance matrix subset to that pair's samples, following MicrobiomeAnalystR
+    # (.permanova_pairwise). FDR is applied within each metric-and-term family
+    # below, since that is the set of comparisons a reader reads together.
+    if (pairwise) {
+      for (v in terms) {
+        if (is.numeric(md[[v]])) next
+        g <- droplevels(md[[v]])
+        lv <- levels(g)
+        if (length(lv) < 3L) next  # with 2 levels the only pair is the omnibus
+        combos <- utils::combn(lv, 2L)
+        for (j in seq_len(ncol(combos))) {
+          pr <- combos[, j]
+          idx <- which(as.character(g) %in% pr)
+          dij <- stats::as.dist(as.matrix(d)[idx, idx])
+          gij <- data.frame(g = factor(as.character(g[idx]), levels = pr))
+          set.seed(seed)
+          control <- if (is.null(strata)) NULL else {
+            permute::how(nperm = permutations,
+                         blocks = factor(as.character(md[[strata]][idx])))
+          }
+          a <- if (is.null(control)) {
+            vegan::adonis2(dij ~ g, data = gij, permutations = permutations)
+          } else {
+            vegan::adonis2(dij ~ g, data = gij, permutations = control)
+          }
+          pair_rows[[length(pair_rows) + 1L]] <- data.frame(
+            metric = m, term = v,
+            group1 = pr[1], group2 = pr[2], n = length(idx),
+            pseudo_F = a[["F"]][1], R2 = a[["R2"]][1], p = a[["Pr(>F)"]][1],
+            stringsAsFactors = FALSE
+          )
+        }
+      }
+    }
   }
 
   results <- do.call(rbind, res_rows)
@@ -144,9 +189,19 @@ ap_permanova <- function(beta,
   rownames(results) <- NULL
   rownames(dispersion) <- NULL
 
+  pairwise_tab <- if (length(pair_rows) > 0L) {
+    pw <- do.call(rbind, pair_rows)
+    # FDR within each metric-and-term comparison family, as MicrobiomeAnalystR does
+    # per call, not across every metric at once.
+    pw$p_adj <- stats::ave(pw$p, pw$metric, pw$term,
+                           FUN = function(p) stats::p.adjust(p, method = "BH"))
+    rownames(pw) <- NULL
+    pw
+  } else NULL
+
   out <- structure(
-    list(results = results, dispersion = dispersion, terms = terms,
-         metrics = metrics, permutations = permutations, by = by,
+    list(results = results, dispersion = dispersion, pairwise = pairwise_tab,
+         terms = terms, metrics = metrics, permutations = permutations, by = by,
          strata = strata, seed = seed, beta = beta),
     class = "ap_permanova"
   )
@@ -245,6 +300,19 @@ print.ap_permanova <- function(x, ...) {
     stringsAsFactors = FALSE
   )
   print(out, row.names = FALSE)
+
+  if (!is.null(x$pairwise)) {
+    cli::cli_h2("Pairwise PERMANOVA (FDR within each metric and term)")
+    pw <- x$pairwise
+    pw <- pw[order(match(pw$metric, x$metrics), match(pw$term, x$terms)), ]
+    print(data.frame(
+      metric = pw$metric, term = pw$term,
+      pair = paste(pw$group1, "vs", pw$group2),
+      pseudo_F = round(pw$pseudo_F, 3), R2 = round(pw$R2, 4),
+      p = format.pval(pw$p, digits = 2), q = format.pval(pw$p_adj, digits = 2),
+      stringsAsFactors = FALSE
+    ), row.names = FALSE)
+  }
 
   cli::cli_h2("What this means")
   for (i in seq_len(nrow(x$interpretation))) {

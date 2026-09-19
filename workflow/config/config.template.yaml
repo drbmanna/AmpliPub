@@ -95,8 +95,17 @@ analysis:
   force_group: false              # true: run even then. The report says it was forced
   explains_terms: []              # two or more terms to fit together in ap_explains()
   da_levels: []                   # e.g. [control, case]; empty keeps every level
-  da_reference: null
+  da_reference: null              # a level of `group`, e.g. control. Default null.
+                                  # Sets the baseline for differential abundance AND for the
+                                  # publication composition heatmaps: with a reference, each
+                                  # heatmap column is a group minus the reference, and the
+                                  # reference column (all zeros) is not drawn. With null, every
+                                  # group is drawn, centred on the average of the groups.
   da_methods: []                  # empty: every method ap_da() supports
+  da_primary: ancombc2            # method in the main-text DA figure: ancombc2, linda or
+                                  # maaslin2. Choose it BEFORE the run and do not change it
+                                  # after seeing the results; the other methods are there to
+                                  # check it, and are compared in the concordance figure.
   normalizations: [tss, css, clr, rarefy]
   seed: 1
   permutations: 999
@@ -110,3 +119,6 @@ publication:
   labels:                         # axis titles for metadata variables; unlisted ones
     my_group_column: My group     # are shown by their column name
   capitalize_levels: true         # "adenoma" -> "Adenoma" on the axis
+  level_labels: {}                # names for group levels in figures and legends, keyed by
+                                  # the metadata value, e.g. {cancer: CRC, normal: Healthy}.
+                                  # Shown exactly as written; unlisted levels keep their value.

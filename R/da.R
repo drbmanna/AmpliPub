@@ -54,6 +54,24 @@ ap_da_methods <- function() c("ancombc2", "aldex2", "linda", "maaslin2")
 #'
 #' @return An object of class `ap_da`: a list with `results` (one row per
 #'   feature per method) and the settings used.
+#'
+#' @section What counts as significant:
+#' A feature is significant for a method when its adjusted p-value is below
+#' `alpha` and, for ANCOM-BC2, it also passed ANCOM-BC2's pseudocount sensitivity
+#' analysis. That analysis re-runs the method with pseudocounts added to zeros; a
+#' call that changes is sensitive to how zeros are handled. ANCOMBC calls the
+#' combined criterion `diff_robust` and recommends it for the final call. Calls
+#' that failed are kept in `results` with `failed_sensitivity = TRUE` and a note,
+#' counted in the print, and not counted as significant. Sparse features fail most
+#' often: ANCOM-BC2 estimates from the non-zero counts by default, and whether a
+#' feature differs where present is a different question from whether it differs
+#' overall.
+#'
+#' ANCOM-BC2 also detects structural zeros: a taxon absent, or nearly so, from every
+#' sample of one group (ANCOM-II's criteria, with the lower-bound criterion when every
+#' group has more than 30 samples). ANCOM-BC2 declares such a taxon differentially
+#' abundant without estimating an effect. It is kept with `structural_zero = TRUE`, a
+#' `direction` from which group lacks it, no effect or p-value, and counted as a call.
 #' @export
 ap_da <- function(x,
                   group,
@@ -165,7 +183,13 @@ ap_da <- function(x,
   # all; without it every method looks like it tested a different comparison.
   results$contrast <- paste0(results$contrast, "_vs_", reference)
   results$prevalence <- prevalence[match(results$feature, names(prevalence))]
-  results$significant <- !is.na(results$p_adj) & results$p_adj < alpha
+  # A method's own robustness check overrides its p-value: a call that failed it is
+  # kept in the table, flagged, and not counted. Only ANCOM-BC2 has such a check.
+  below <- !is.na(results$p_adj) & results$p_adj < alpha
+  results$failed_sensitivity <- below & results$passed_sensitivity %in% FALSE
+  # A structural zero is a call without a p-value: ANCOM-BC2 declares a taxon absent
+  # from one group differentially abundant.
+  results$significant <- (below & !results$failed_sensitivity) | results$structural_zero
   rownames(results) <- NULL
 
   # Taxonomy carried along, so a result is readable without a second join.
@@ -202,7 +226,9 @@ ap_da_run_one <- function(m, counts, meta, group, covariates, subject, reference
 # say what that scale is.
 #' @keywords internal
 ap_da_row <- function(feature, method, effect, effect_scale, se, statistic,
-                      p, p_adj, contrast, note = NA_character_) {
+                      p, p_adj, contrast, note = NA_character_,
+                      passed_sensitivity = NA, structural_zero = FALSE,
+                      direction = NULL) {
   data.frame(
     feature = as.character(feature),
     method = method,
@@ -214,6 +240,13 @@ ap_da_row <- function(feature, method, effect, effect_scale, se, statistic,
     p = as.numeric(p),
     p_adj = as.numeric(p_adj),
     note = note,
+    # NA for methods with no robustness check of their own; FALSE only where a
+    # method's own check failed (ANCOM-BC2's pseudocount sensitivity analysis).
+    passed_sensitivity = as.logical(passed_sensitivity),
+    # TRUE where a feature was called because it is absent from one group
+    # (ANCOM-BC2's structural zeros): no effect or p-value, only a direction.
+    structural_zero = as.logical(structural_zero),
+    direction = if (is.null(direction)) sign(as.numeric(effect)) else as.numeric(direction),
     stringsAsFactors = FALSE
   )
 }
@@ -234,7 +267,24 @@ print.ap_da <- function(x, ...) {
   names(tab)[3] <- "n_significant"
   tab$n_tested <- stats::aggregate(significant ~ method + contrast,
                                    data = x$results, FUN = length)$significant
+  fs <- stats::aggregate(failed_sensitivity ~ method + contrast, data = x$results, FUN = sum)
+  tab$n_failed_sensitivity <- fs$failed_sensitivity[
+    match(paste(tab$method, tab$contrast), paste(fs$method, fs$contrast))]
   print(tab, row.names = FALSE)
+  n_sz <- sum(x$results$structural_zero)
+  if (n_sz > 0L) {
+    cli::cli_alert_info(paste0(
+      "{n_sz} call{?s} {?is/are} ANCOM-BC2 structural zero{?s}: absent from one group, ",
+      "declared differentially abundant without an effect or p-value."
+    ))
+  }
+  n_fail <- sum(x$results$failed_sensitivity)
+  if (n_fail > 0L) {
+    cli::cli_alert_warning(paste0(
+      "{n_fail} call{?s} had adjusted p below {x$alpha} but failed the method's own ",
+      "sensitivity analysis, and {?is/are} not counted as significant."
+    ))
+  }
 
   cli::cli_text("")
   cli::cli_alert_info(paste0(
