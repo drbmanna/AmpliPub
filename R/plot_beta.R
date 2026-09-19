@@ -389,7 +389,7 @@ ap_dispersion_plotmath <- function(pn, metric, term) {
   c(perm,
     sprintf("'betadisper:' ~ italic(F) == '%.2f' * ',' ~ italic(p) == '%s'",
             d$dispersion_F[1], pv(d$dispersion_p[1])),
-    sprintf("'spread ratio' ~ '%.2f×'", d$max_centroid_ratio[1]))
+    sprintf("'spread ratio' ~ '%.2f\u00d7'", d$max_centroid_ratio[1]))
 }
 
 #' Legend text for a publication dispersion figure

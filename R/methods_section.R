@@ -231,7 +231,7 @@ ap_methods_section <- function(res, run_dir = NULL, provenance_dir = NULL) {
                 if (primary %in% meths) sprintf(paste0(
                   " %s was designated the primary method in the analysis configuration; its ",
                   "effect estimates are reported with 95%% Wald intervals (estimate %s 1.96 ",
-                  "standard errors)."), ap_da_method_title(primary), "±") else "",
+                  "standard errors)."), ap_da_method_title(primary), "\u00b1") else "",
                 res$concordance$min_methods %||% length(meths)))
   }
 

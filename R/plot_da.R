@@ -721,7 +721,7 @@ ap_da_legend_primary <- function(concordance, primary, max_features, pub) {
     sprintf(paste0("Primary method %s. Points: %s with 95%% interval (estimate %s 1.96 SE, not ",
                    "adjusted for multiple testing). Right: q, the %s-adjusted p-value from %s's ",
                    "own test."),
-            ap_da_method_title(primary), scale, "±", da$p_adj_method,
+            ap_da_method_title(primary), scale, "\u00b1", da$p_adj_method,
             ap_da_method_title(primary)),
     if (primary == "ancombc2") {
       paste0("A feature counts as called only if it also passed ANCOM-BC2's pseudocount ",
