@@ -75,67 +75,6 @@ Built and run today:
 - Draws figures sized for journal columns, and writes a methods draft from the analysis
   that ran.
 
-## Example output
-
-**Study.** Baxter et al. 2016 (Genome Medicine, SRA PRJNA290926): stool samples sequenced
-for the 16S rRNA V4 region on Illumina MiSeq, from people diagnosed with a normal colon,
-an adenoma or a carcinoma. The run starts from the 544 raw sequencing runs and ends
-with 490 samples in the study metadata (172 normal, 198 adenoma, 120 cancer), 487 of which
-keep at least 10,000 reads.
-
-**Design.** A cross-sectional comparison of three diagnosis groups, one sample per person.
-Alpha and beta diversity compare all three groups. Differential abundance compares cancer
-with normal.
-
-The figures below are drawn by AmpliPub without manual editing. Each is written as PDF,
-SVG and 600 dpi PNG, sized for a journal column, with the statistics in a separate legend
-file rather than on the panel.
-
-<table>
-  <tr>
-    <td width="50%"><img src="man/figures/examples/alpha.png" width="100%" /></td>
-    <td width="50%"><img src="man/figures/examples/taxa_genus_bars.png" width="100%" /></td>
-  </tr>
-  <tr>
-    <td>Alpha diversity by diagnosis at a common depth of 10,000 reads, 487 samples. The
-    test, adjusted p-value and effect size with its 95% interval go to the legend file.</td>
-    <td>Mean relative abundance of the most abundant genera in each group (198 adenoma,
-    120 cancer, 172 normal).</td>
-  </tr>
-  <tr>
-    <td><img src="man/figures/examples/ordination_bray_curtis.png" width="100%" /></td>
-    <td><img src="man/figures/examples/dispersion_bray_curtis.png" width="100%" /></td>
-  </tr>
-  <tr>
-    <td>PCoA on Bray-Curtis. The first two axes explain 14.4% and 12.3% of the eigenvalue
-    mass is negative, so AmpliPub flags the plot as a distorted projection rather than a
-    map.</td>
-    <td>Distance to group centroid. The dispersion test is significant (p = 0.034), so the
-    significant PERMANOVA (R² = 0.0062, p = 0.005) is reported as confounded by
-    dispersion, not as a shift in community composition.</td>
-  </tr>
-  <tr>
-    <td><img src="man/figures/examples/da_volcano.png" width="100%" /></td>
-    <td><img src="man/figures/examples/da_concordance.png" width="100%" /></td>
-  </tr>
-  <tr>
-    <td>Cancer versus normal with four methods on one prevalence filter (391 features, 292
-    samples). 145 ANCOM-BC2 results that fail its pseudocount sensitivity analysis are
-    drawn as open circles and not counted.</td>
-    <td>Which features each method calls, and in which direction. No feature is called by
-    all four methods, and the figure says so rather than picking one method.</td>
-  </tr>
-</table>
-
-**What the analysis says.** Diagnosis explains little of the variation in these stool
-communities. Alpha diversity differs only in evenness, and weakly (eta squared 0.018,
-q = 0.021). Community composition differs significantly between groups, but diagnosis
-accounts for 0.6% of the variation (Bray-Curtis R² = 0.0062), and the groups also differ
-in spread, so the result cannot be read as a clean shift. No ASV is called by all four
-differential abundance methods. A pipeline that reported only the PERMANOVA p-value, or only
-one differential abundance method, would make the same data look like a clearer result
-than it is.
-
 ## Framework structure
 
 ![AmpliPub framework: from reads or a feature table to statistics, figures and a methods section](man/figures/amplipub_framework.png)
@@ -242,6 +181,67 @@ conda run -n amplipub-snakemake snakemake -s /path/to/AmpliPub/workflow/Snakefil
 
 Add `-n` for a dry run first. See [workflow/README.md](workflow/README.md) for the config
 and for each stage.
+
+## Example output
+
+**Study.** Baxter et al. 2016 (Genome Medicine, SRA PRJNA290926): stool samples sequenced
+for the 16S rRNA V4 region on Illumina MiSeq, from people diagnosed with a normal colon,
+an adenoma or a carcinoma. The run starts from the 544 raw sequencing runs and ends
+with 490 samples in the study metadata (172 normal, 198 adenoma, 120 cancer), 487 of which
+keep at least 10,000 reads.
+
+**Design.** A cross-sectional comparison of three diagnosis groups, one sample per person.
+Alpha and beta diversity compare all three groups. Differential abundance compares cancer
+with normal.
+
+The figures below are drawn by AmpliPub without manual editing. Each is written as PDF,
+SVG and 600 dpi PNG, sized for a journal column, with the statistics in a separate legend
+file rather than on the panel.
+
+<table>
+  <tr>
+    <td width="50%"><img src="man/figures/examples/alpha.png" width="100%" /></td>
+    <td width="50%"><img src="man/figures/examples/taxa_genus_bars.png" width="100%" /></td>
+  </tr>
+  <tr>
+    <td>Alpha diversity by diagnosis at a common depth of 10,000 reads, 487 samples. The
+    test, adjusted p-value and effect size with its 95% interval go to the legend file.</td>
+    <td>Mean relative abundance of the most abundant genera in each group (198 adenoma,
+    120 cancer, 172 normal).</td>
+  </tr>
+  <tr>
+    <td><img src="man/figures/examples/ordination_bray_curtis.png" width="100%" /></td>
+    <td><img src="man/figures/examples/dispersion_bray_curtis.png" width="100%" /></td>
+  </tr>
+  <tr>
+    <td>PCoA on Bray-Curtis. The first two axes explain 14.4% and 12.3% of the eigenvalue
+    mass is negative, so AmpliPub flags the plot as a distorted projection rather than a
+    map.</td>
+    <td>Distance to group centroid. The dispersion test is significant (p = 0.034), so the
+    significant PERMANOVA (R² = 0.0062, p = 0.005) is reported as confounded by
+    dispersion, not as a shift in community composition.</td>
+  </tr>
+  <tr>
+    <td><img src="man/figures/examples/da_volcano.png" width="100%" /></td>
+    <td><img src="man/figures/examples/da_concordance.png" width="100%" /></td>
+  </tr>
+  <tr>
+    <td>Cancer versus normal with four methods on one prevalence filter (391 features, 292
+    samples). 145 ANCOM-BC2 results that fail its pseudocount sensitivity analysis are
+    drawn as open circles and not counted.</td>
+    <td>Which features each method calls, and in which direction. No feature is called by
+    all four methods, and the figure says so rather than picking one method.</td>
+  </tr>
+</table>
+
+**What the analysis says.** Diagnosis explains little of the variation in these stool
+communities. Alpha diversity differs only in evenness, and weakly (eta squared 0.018,
+q = 0.021). Community composition differs significantly between groups, but diagnosis
+accounts for 0.6% of the variation (Bray-Curtis R² = 0.0062), and the groups also differ
+in spread, so the result cannot be read as a clean shift. No ASV is called by all four
+differential abundance methods. A pipeline that reported only the PERMANOVA p-value, or only
+one differential abundance method, would make the same data look like a clearer result
+than it is.
 
 ## Roadmap
 
