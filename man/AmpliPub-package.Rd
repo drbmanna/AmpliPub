@@ -8,8 +8,16 @@
 \description{
 Statistical analysis and figure generation for amplicon sequencing data (16S, 18S, ITS), starting from an abundance table and sample metadata. Runs the tests that peer review expects, checks the assumptions those tests depend on, reports results across multiple methods rather than a single one, and produces figures that are ready to submit. Pipeline-agnostic: accepts output from QIIME 2, DADA2, mothur, or any source that yields a feature table.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/drbmanna/AmpliPub}
+  \item Report bugs at \url{https://github.com/drbmanna/AmpliPub/issues}
+}
+
+}
 \author{
-\strong{Maintainer}: Bharat Manna \email{bharatmanna@gmail.com}
+\strong{Maintainer}: Bharat Manna \email{bharatmanna@gmail.com} (\href{https://orcid.org/0000-0001-7394-8204}{ORCID})
 
 }
 \keyword{internal}

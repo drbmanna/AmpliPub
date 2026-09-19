@@ -4,7 +4,8 @@ Version: 0.0.1
 Authors@R:
     person("Bharat", "Manna",
            email = "bharatmanna@gmail.com",
-           role = c("aut", "cre"))
+           role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0001-7394-8204"))
 Description: Statistical analysis and figure generation for amplicon sequencing
     data (16S, 18S, ITS), starting from an abundance table and sample metadata.
     Runs the tests that peer review expects, checks the assumptions those tests
@@ -14,6 +15,8 @@ Description: Statistical analysis and figure generation for amplicon sequencing
     table.
 biocViews: Microbiome, Sequencing, Software, DifferentialExpression
 License: MIT + file LICENSE
+URL: https://github.com/drbmanna/AmpliPub
+BugReports: https://github.com/drbmanna/AmpliPub/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
