@@ -145,8 +145,12 @@ some dependencies come from Bioconductor:
 
 ```r
 options(repos = BiocManager::repositories())
-remotes::install_github("drbmanna/AmpliPub")
+remotes::install_github("drbmanna/AmpliPub", dependencies = TRUE)
 ```
+
+`dependencies = TRUE` also installs the four differential abundance packages (ALDEx2,
+ANCOMBC, MicrobiomeStat, Maaslin2) and the plotting extras. Without it the core package
+installs, and each of those steps stops with a message naming the package it needs.
 
 ```r
 library(AmpliPub)
@@ -156,14 +160,15 @@ a  <- ap_alpha(x, depth = 10000)
 at <- ap_alpha_test(a, group = "dx")
 b  <- ap_beta(x, depth = 10000)
 ap_permanova(b, terms = "dx")
-d  <- ap_da(x, group = "dx", reference = "normal")
+x2 <- x[, x$dx %in% c("cancer", "normal")]   # one two-group contrast (ALDEx2 takes two groups)
+d  <- ap_da(x2, group = "dx", reference = "normal")
 ap_da_concordance(d)
 ap_save_figure(ap_plot_alpha(a, group = "dx", test = at, publication = TRUE),
                "alpha", dir = "figures")
 ```
 
-`dx`, `normal` and the depth are placeholders for your own grouping variable, reference
-level and rarefaction depth. The tree and taxonomy are optional. Argument details are in
+`dx`, `cancer`, `normal` and the depth are placeholders for your own grouping variable, its
+levels and the rarefaction depth. The tree and taxonomy are optional. Argument details are in
 each function's help page.
 
 ### Full Snakemake pipeline (raw FASTQ to report)
