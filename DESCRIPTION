@@ -1,6 +1,6 @@
 Package: AmpliPub
 Title: Publication-Grade Statistics and Figures for Amplicon Sequencing Data
-Version: 0.0.0.9000
+Version: 0.0.1
 Authors@R:
     person("Bharat", "Manna",
            email = "bharatmanna@gmail.com",

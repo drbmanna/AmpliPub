@@ -13,3 +13,6 @@
 ^\.gitattributes$
 ^\.pytest_cache$
 ^analysis$
+^VALIDATION\.md$
+^\.snakemake$
+^man/figures$

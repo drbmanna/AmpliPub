@@ -12,10 +12,14 @@ on:
     paths:
       - 'workflow/**'
       - '.github/workflows/workflow-tests.yaml'
+      - 'DESCRIPTION'
+      - 'README.md'
   pull_request:
     paths:
       - 'workflow/**'
       - '.github/workflows/workflow-tests.yaml'
+      - 'DESCRIPTION'
+      - 'README.md'
   workflow_dispatch:
 
 permissions:
