@@ -1,5 +1,8 @@
 # AmpliPub 0.0.1
 
+[![R-CMD-check](https://github.com/drbmanna/AmpliPub/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/drbmanna/AmpliPub/actions/workflows/R-CMD-check.yaml)
+[![workflow-tests](https://github.com/drbmanna/AmpliPub/actions/workflows/workflow-tests.yaml/badge.svg)](https://github.com/drbmanna/AmpliPub/actions/workflows/workflow-tests.yaml)
+
 From raw amplicon reads to publication-grade statistics and figures, in one reproducible
 framework.
 
@@ -7,6 +10,11 @@ framework.
 statistics layer are both built and have been run end to end on a public 544-run dataset.
 It has been validated on one 16S V4 dataset only, and the interface may still change. What
 has and has not been checked is in [VALIDATION.md](VALIDATION.md).
+
+**Scope.** The R statistics layer works on any amplicon feature table (16S rRNA, 18S, ITS or
+a functional marker gene). The raw-read workflow has so far been run and validated only on
+16S rRNA V4 data with a Greengenes2 V4 classifier; other markers need their own primers,
+truncation settings and classifier.
 
 ## Motivation
 
@@ -69,10 +77,19 @@ Built and run today:
 
 ## Example output
 
-Publication figures from the full run on Baxter et al. 2016 (16S V4 stool samples,
-diagnosis normal, adenoma or cancer), drawn by AmpliPub without manual editing. Each figure
-is written as PDF, SVG and 600 dpi PNG, sized for a journal column, with the statistics in
-a separate legend file rather than on the panel.
+**Study.** Baxter et al. 2016 (Genome Medicine, SRA PRJNA290926): stool samples sequenced
+for the 16S rRNA V4 region on Illumina MiSeq, from people diagnosed with a normal colon,
+an adenoma or a carcinoma. The run starts from the 544 raw sequencing runs and ends
+with 490 samples in the study metadata (172 normal, 198 adenoma, 120 cancer), 487 of which
+keep at least 10,000 reads.
+
+**Design.** A cross-sectional comparison of three diagnosis groups, one sample per person.
+Alpha and beta diversity compare all three groups. Differential abundance compares cancer
+with normal.
+
+The figures below are drawn by AmpliPub without manual editing. Each is written as PDF,
+SVG and 600 dpi PNG, sized for a journal column, with the statistics in a separate legend
+file rather than on the panel.
 
 <table>
   <tr>
@@ -109,6 +126,15 @@ a separate legend file rather than on the panel.
     all four methods, and the figure says so rather than picking one method.</td>
   </tr>
 </table>
+
+**What the analysis says.** Diagnosis explains little of the variation in these stool
+communities. Alpha diversity differs only in evenness, and weakly (eta squared 0.018,
+q = 0.021). Community composition differs significantly between groups, but diagnosis
+accounts for 0.6% of the variation (Bray-Curtis R² = 0.0062), and the groups also differ
+in spread, so the result cannot be read as a clean shift. No ASV is called by all four
+differential abundance methods. A pipeline that reported only the PERMANOVA p-value, or only
+one differential abundance method, would make the same data look like a clearer result
+than it is.
 
 ## Framework structure
 
@@ -170,16 +196,18 @@ Every stage has been run on all 544 runs of it.
   600 dpi PNG with the statistics in a legend file. A methods draft populated from the
   analysis that actually ran, with references taken from each package's own citation.
 
-## Installation
+## Installation and quick start
 
-The R package installs from GitHub. Some dependencies come from Bioconductor:
+### R package only (starting from an ASV or OTU table)
+
+Use this if you already have a feature table from QIIME 2, DADA2, mothur or any other
+pipeline. No Snakemake, conda or QIIME 2 is needed. The package installs from GitHub, and
+some dependencies come from Bioconductor:
 
 ```r
 options(repos = BiocManager::repositories())
 remotes::install_github("drbmanna/AmpliPub")
 ```
-
-Starting from a feature table:
 
 ```r
 library(AmpliPub)
@@ -196,15 +224,24 @@ ap_save_figure(ap_plot_alpha(a, group = "dx", test = at, publication = TRUE),
 ```
 
 `dx`, `normal` and the depth are placeholders for your own grouping variable, reference
-level and rarefaction depth. Argument details are in each function's help page.
+level and rarefaction depth. The tree and taxonomy are optional. Argument details are in
+each function's help page.
 
-The workflow runs on Linux or WSL and needs conda:
+### Full Snakemake pipeline (raw FASTQ to report)
+
+Use this to start from an SRA accession or your own FASTQ files. It runs on Linux or WSL
+and needs conda. The environments are built from the committed lockfiles:
 
 ```bash
 bash workflow/setup_envs.sh
+cp workflow/config/config.template.yaml ~/my_study.yaml   # edit paths and checksums; keep it outside the repo
+mkdir -p ~/runs/my_study && cd ~/runs/my_study
+conda run -n amplipub-snakemake snakemake -s /path/to/AmpliPub/workflow/Snakefile \
+  --configfile ~/my_study.yaml --sdm conda --cores 12
 ```
 
-See [workflow/README.md](workflow/README.md) for each stage.
+Add `-n` for a dry run first. See [workflow/README.md](workflow/README.md) for the config
+and for each stage.
 
 ## Roadmap
 
@@ -213,6 +250,8 @@ Planned for later 0.0.x releases, in no fixed order:
 - **Replay from the output folder.** Every run will record enough to be redone by someone
   who has only its output: the exact command, the configuration, the software image and
   the input checksums.
+- **A bundled example dataset.** A small table shipped with the package, so the quick start
+  runs as written without any download.
 - **Longer amplicon regions.** Support for V3-V4 data, with settings and a reference
   classifier suited to the longer read.
 - **Functional profiles.** Predicted functional content of the community, labelled in the
