@@ -18,8 +18,19 @@ truncation settings and classifier.
 
 ## Motivation
 
-A 16S analysis usually means QIIME 2 in one place, R in another, statistics in a third,
-and plotting in a fourth. AmpliPub runs all of it as one project.
+Amplicon statistics are easy to run and easy to misread. A PERMANOVA p-value is read as a
+shift in community composition when the groups may only differ in spread. Differential
+abundance methods disagree with each other, and a paper usually reports one. An ordination
+plot is read as a map when most of the variation lies off the plotted axes.
+
+None of these mistakes produces an error. The software returns a number, and the number
+looks fine. On the Baxter et al. 2016 data, PERMANOVA on diagnosis is significant
+(p = 0.005), but the groups also differ in dispersion. ANCOM-BC2 flags 146 ASVs, of which
+145 fail its own sensitivity analysis. No ASV is called by all four common methods.
+
+AmpliPub runs the analysis from raw reads or a feature table, and at each step checks
+whether the result means what it appears to mean. It says so in plain text when it does
+not.
 
 ## More than a wrapper
 
