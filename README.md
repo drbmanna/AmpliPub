@@ -262,10 +262,19 @@ file rather than on the panel.
 communities. Alpha diversity differs only in evenness, and weakly (eta squared 0.018,
 q = 0.021). Community composition differs significantly between groups, but diagnosis
 accounts for 0.6% of the variation (Bray-Curtis R² = 0.0062), and the groups also differ
-in spread, so the result cannot be read as a clean shift. No ASV is called by all four
-differential abundance methods. A pipeline that reported only the PERMANOVA p-value, or only
-one differential abundance method, would make the same data look like a clearer result
-than it is.
+in spread, so the result cannot be read as a clean shift. This agrees with the original
+study, which built a screening model rather than testing for community-wide differences.
+For cancer versus normal, *Parvimonas micra*, one of the species that study associates with
+cancer, is called by three of the four differential abundance methods and is enriched in
+cancer. A pipeline that reported only the PERMANOVA p-value, or only one differential
+abundance method, would make the same data look like a clearer result than it is.
+
+**Known limitation in 0.0.1.** The other cancer-associated taxa the study reports were not
+tested. The differential abundance prevalence filter (present in 10% of samples) is
+computed over cancer and normal together, so it removed *Peptostreptococcus* and three
+*Porphyromonas* ASVs that occur in 17-21% of cancer samples and 1-3% of normal samples.
+The filter does this without a warning. From 0.0.2, features removed by the filter whose
+prevalence differs between groups will be listed in the output and the report.
 
 ## Roadmap
 

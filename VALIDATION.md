@@ -132,3 +132,9 @@ Each was fixed, and each has a test that fails if it comes back.
   datasets, is planned and not done. Its success criteria will be written down before it
   runs.
 - **The two unexplained mock samples** (section 4).
+- **Features removed by the differential abundance prevalence filter.** The 10% prevalence
+  filter is computed over the compared groups together. On Baxter, cancer versus normal, it
+  removed *Peptostreptococcus* and three *Porphyromonas* ASVs present in 17-21% of cancer
+  and 1-3% of normal samples, taxa the original study associates with cancer, and gave no
+  warning. *Parvimonas micra* (26% versus 5%) passed the filter and is called by three of
+  four methods. Reporting the removed, group-asymmetric features is planned for 0.0.2.

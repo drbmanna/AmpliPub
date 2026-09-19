@@ -28,3 +28,10 @@ First public release.
 ## Validation
 
 * See `VALIDATION.md`. Tested on one dataset (Baxter et al. 2016, 16S V4).
+
+## Known issues
+
+* The differential abundance prevalence filter is computed over the compared groups
+  together and silently removes features common in one group and rare in the other. On
+  Baxter it removed *Peptostreptococcus* and *Porphyromonas* ASVs associated with cancer.
+  Planned for 0.0.2: list such features in the output and the report.
