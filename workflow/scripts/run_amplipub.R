@@ -257,6 +257,11 @@ write_tsv(screen$results, "screen_results")
 write_tsv(screen$by_variable, "screen_by_variable")
 if (!is.null(screen$skipped)) write_tsv(screen$skipped, "screen_skipped")
 try_plot(ap_plot_screen(screen, n = 25L), "screen", width = 6.5, height = 5.5)
+# Publication: alpha and beta as two heatmaps with their own colour scales, same row order.
+for (fam in c("alpha", "beta")) {
+  try_pub(ap_plot_screen(screen, publication = TRUE, family = fam, pub = pub),
+          paste0("screen_", fam), legend = ap_screen_legend(screen, fam, pub))
+}
 
 explains <- NULL
 if (length(an$explains_terms) >= 2L) {

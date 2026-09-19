@@ -36,8 +36,8 @@ minimum \code{10}.}
 \item Default \code{0.8}.
 }}
 
-\item{top_k}{A row is stable in a subsample when it ranks in the top \code{top_k}.
-Default \code{5}.}
+\item{top_k}{A row is stable in a subsample when it ranks in the top \code{top_k}
+of its family. Default \code{5}.}
 
 \item{seed}{Random seed for the permutations and the subsamples, recorded
 with the result.}
@@ -71,8 +71,10 @@ ones in \code{effect_adj}.
 
 These are all proportions of variance, but not of the same variance: R2
 partitions distance sums of squares and eta squared (H) partitions rank
-variance. Order within a family is exact; order across families is
-approximate.
+variance. Tests are therefore ranked within their family only: \code{results}
+lists the alpha tests, then the beta tests, and \code{rank} restarts at 1 in each.
+Ranked together, beta R2 (typically a few times smaller) would almost never
+reach the top of the list, whatever its strength.
 }
 
 \section{Multiple testing}{
@@ -91,6 +93,9 @@ used rather than the bootstrap because resampling with replacement puts
 duplicate samples at zero distance from each other, which inflates
 PERMANOVA R2. Subsamples overlap, so stability says how much a rank depends
 on which samples were drawn. It does not say whether the effect is real.
+The top \code{top_k} is taken within the row's family. A family with \code{top_k} or
+fewer tests has every row in its top \code{top_k} by construction, so its
+stability is \code{NA}.
 }
 
 \section{Variables that are not screened}{

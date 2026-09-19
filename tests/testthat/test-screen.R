@@ -31,7 +31,13 @@ test_that("one BH correction runs across the whole screen and the test count is 
   expect_equal(nrow(s$results), s$n_tests)
   expect_equal(s$results$q, stats::p.adjust(s$results$p, method = "BH"))
   expect_equal(s$expected_false_positives, 0.05 * 12)
-  expect_equal(s$results$effect_adj, sort(s$results$effect_adj, decreasing = TRUE))
+  # Alpha first, then beta; each sorted by adjusted effect, with rank restarting at 1.
+  expect_equal(s$results$family, sort(s$results$family))
+  for (f in c("alpha", "beta")) {
+    e <- s$results$effect_adj[s$results$family == f]
+    expect_equal(e, sort(e, decreasing = TRUE))
+    expect_equal(s$results$rank[s$results$family == f], seq_along(e))
+  }
 })
 
 test_that("printing states the test count and that the screen is hypothesis-generating", {
@@ -183,4 +189,25 @@ test_that("a null variable with many levels does not outrank a real two-level ef
   expect_equal(r$variable[1], "real")
   expect_equal(r$df[r$variable == "many"], 249)
   expect_equal(r$effect_adj, 1 - (1 - r$effect) * (r$n - 1) / (r$n - r$df - 1))
+})
+
+test_that("stability is ranked within each family, and NA where a family is too small", {
+  f <- ap_fixture_screen_inputs()
+  # 8 alpha tests (4 variables x q0, q1) and 4 beta tests (bray_curtis).
+  s <- ap_screen(alpha = f$alpha, beta = f$beta, permutations = 99L, n_resample = 20L,
+                 top_k = 2L)
+  for (fam in c("alpha", "beta")) {
+    st <- s$results$stability[s$results$family == fam]
+    expect_false(anyNA(st))
+    # Within a family exactly top_k rows are in its top k per subsample (up to ties).
+    expect_lt(abs(sum(st) - 2), 0.35)
+  }
+  # With top_k = 5 the beta family (4 tests) is all "in the top 5" by construction.
+  s5 <- ap_screen(alpha = f$alpha, beta = f$beta, permutations = 99L, n_resample = 20L)
+  expect_true(all(is.na(s5$results$stability[s5$results$family == "beta"])))
+  expect_false(anyNA(s5$results$stability[s5$results$family == "alpha"]))
+  expect_match(ap_screen_legend(s5, "beta")[4], "not estimated")
+  # by_variable names its best test by rank within a family.
+  expect_true(all(s$by_variable$best_rank >= 1))
+  expect_equal(s$by_variable$best_rank, sort(s$by_variable$best_rank))
 })

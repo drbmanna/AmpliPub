@@ -133,8 +133,12 @@ test_that("the legend carries each metric's test, n, q and effect size", {
   a <- ap_alpha(x, metrics = c("q0", "q1"), n_iter = 2L)
   t <- ap_alpha_test(a, "group", seed = 1L)
   leg <- ap_alpha_legend(a, t)
-  expect_length(leg, 3)
-  expect_match(leg[2], "^Hill q0 \\(observed richness\\): .+, n = \\d+, q = .+, .+ = -?[0-9.]+")
+  # Caption, the two naming notes (Hill numbers; why no Chao1), then one line per metric.
+  expect_length(leg, 5)
+  expect_match(leg[2], "^Shannon and inverse Simpson are the Hill numbers of order 1 and 2")
+  expect_match(leg[3], "^Chao1 and ACE are not reported")
+  expect_match(leg[4], "^Richness: .+, n = \\d+, q = .+, .+ = -?[0-9.]+")
+  expect_match(leg[5], "^Shannon: ")
 })
 
 ord_fixture <- function() {
@@ -414,6 +418,12 @@ test_that("the publication concordance has a row per called feature, fragile cal
   expect_silent(ggplot2::ggplot_build(p2))
   expect_silent(ggplot2::ggplot_build(p))
   expect_equal(attr(p, "ap_pub_size")$width, "single")
+  # Only the exceptions are keyed, once each: a filled dot needs no key, and an absent
+  # triangle layer with no rows must not add a second circle to the failed key.
+  keys <- ggplot2::get_guide_data(p, "shape")
+  expect_equal(keys$.label, "Failed sensitivity analysis")
+  expect_setequal(ggplot2::get_guide_data(p2, "shape")$.label,
+                  c("Absent from one group", "Failed sensitivity analysis"))
 })
 
 test_that("the publication volcano titles each panel with its scale, without nested brackets", {
@@ -591,4 +601,50 @@ test_that("pairwise PERMANOVA legend lines use the level labels", {
   out <- ap_pairwise_lines(perm, "bray_curtis", "dx",
                            ap_pub_options(level_labels = list(cancer = "CRC")))
   expect_match(out[2], "^  adenoma vs CRC: ")
+})
+
+
+# Screen heatmaps ------------------------------------------------------------------------------
+
+test_that("the publication screen draws one family per figure, every variable in one order", {
+  skip_pub()
+  f <- ap_fixture_screen_inputs()
+  s <- ap_screen(alpha = f$alpha, beta = f$beta, permutations = 99L, n_resample = 20L)
+  pa <- ap_plot_screen(s, publication = TRUE, family = "alpha")
+  pb <- ap_plot_screen(s, publication = TRUE, family = "beta")
+  expect_setequal(unique(pa$data$family), "alpha")
+  expect_setequal(unique(pb$data$family), "beta")
+  # Every test of the family is a tile; none is cut off.
+  expect_equal(nrow(pa$data), sum(s$results$family == "alpha"))
+  # Both figures list the variables in the same order.
+  expect_identical(levels(pa$data$row), levels(pb$data$row))
+  # Publication names, not Hill orders.
+  expect_setequal(levels(pa$data$col), c("Richness", "Shannon"))
+  # A dot on exactly the tests with q < 0.05.
+  pts <- ggplot2::layer_data(pa, 2L)
+  expect_equal(nrow(pts), sum(s$results$family == "alpha" & s$results$q < 0.05, na.rm = TRUE))
+  # Negative adjusted effects are drawn as zero, never below.
+  expect_true(all(pa$data$fill >= 0))
+  expect_silent(ggplot2::ggplot_build(pa))
+  expect_silent(ggplot2::ggplot_build(pb))
+  expect_error(ap_plot_screen(s, publication = TRUE, family = "gamma"), "should be one of")
+})
+
+test_that("the screen legend explains the scale, stability and names for its family", {
+  f <- ap_fixture_screen_inputs()
+  s <- ap_screen(alpha = f$alpha, beta = f$beta, permutations = 99L, n_resample = 20L)
+  la <- ap_screen_legend(s, "alpha")
+  lb <- ap_screen_legend(s, "beta")
+  expect_match(la[1], sprintf("alpha diversity: %d tests", sum(s$results$family == "alpha")))
+  expect_match(la[1], sprintf("across all %d tests", nrow(s$results)))
+  expect_true(any(grepl("not shared with the beta diversity figure", la, fixed = TRUE)))
+  expect_true(any(grepl("Hill numbers of order 1 and 2", la, fixed = TRUE)))
+  expect_false(any(grepl("Hill numbers", lb, fixed = TRUE)))
+  expect_true(any(grepl("PERMANOVA R2 adjusted", lb, fixed = TRUE)))
+  expect_match(la[length(la)], "^Hypothesis-generating")
+})
+
+test_that("publication and report use their own metric names", {
+  expect_equal(ap_metric_label_pub(c("q0", "q1", "q2")), c("Richness", "Shannon", "Inverse Simpson"))
+  expect_equal(ap_metric_label(c("q1", "q2")), c("Hill q1\n(Shannon)", "Hill q2\n(inverse Simpson)"))
 })

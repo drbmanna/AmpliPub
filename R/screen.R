@@ -35,8 +35,10 @@
 #'
 #' These are all proportions of variance, but not of the same variance: R2
 #' partitions distance sums of squares and eta squared (H) partitions rank
-#' variance. Order within a family is exact; order across families is
-#' approximate.
+#' variance. Tests are therefore ranked within their family only: `results`
+#' lists the alpha tests, then the beta tests, and `rank` restarts at 1 in each.
+#' Ranked together, beta R2 (typically a few times smaller) would almost never
+#' reach the top of the list, whatever its strength.
 #'
 #' @section Multiple testing:
 #' One Benjamini-Hochberg correction is applied across every test the screen
@@ -51,6 +53,9 @@
 #' duplicate samples at zero distance from each other, which inflates
 #' PERMANOVA R2. Subsamples overlap, so stability says how much a rank depends
 #' on which samples were drawn. It does not say whether the effect is real.
+#' The top `top_k` is taken within the row's family. A family with `top_k` or
+#' fewer tests has every row in its top `top_k` by construction, so its
+#' stability is `NA`.
 #'
 #' @section Variables that are not screened:
 #' Constant variables, identifiers, variables with more than `max_levels`
@@ -69,8 +74,8 @@
 #'   minimum `10`.
 #' @param fraction Share of samples in each subsample, strictly between 0 and
 #'   1. Default `0.8`.
-#' @param top_k A row is stable in a subsample when it ranks in the top `top_k`.
-#'   Default `5`.
+#' @param top_k A row is stable in a subsample when it ranks in the top `top_k`
+#'   of its family. Default `5`.
 #' @param seed Random seed for the permutations and the subsamples, recorded
 #'   with the result.
 #' @param max_levels Passed to [ap_scan_metadata()]. Default `20`.
@@ -200,35 +205,48 @@ ap_screen <- function(alpha = NULL,
   results <- do.call(rbind, rows)
   results$q <- stats::p.adjust(results$p, method = "BH")
   n_tests <- nrow(results)
-  ap_assert(top_k < n_tests,
-            paste0("`top_k` ({top_k}) must be smaller than the number of tests ({n_tests}). ",
-                   "Otherwise every test is in the top k and stability is 1 by construction."))
+  n_family <- table(results$family)
+  ap_assert(any(n_family > top_k),
+            paste0("`top_k` ({top_k}) must be smaller than the number of tests in a family ",
+                   "({paste(names(n_family), n_family, collapse = ', ')}). Otherwise every test ",
+                   "is in the top k and stability is 1 by construction."))
 
-  ord <- order(results$effect_adj, decreasing = TRUE)
+  # Alpha, then beta; within each, largest adjusted effect first. The two families measure
+  # different variances, so a rank across them would not mean anything.
+  ord <- order(results$family != "alpha", -results$effect_adj)
   results <- results[ord, , drop = FALSE]
   specs <- specs[ord]
 
   stab <- ap_screen_stability(specs, mats, n_resample, fraction, top_k, seed)
   results$stability <- stab$stability
   results$median_rank <- stab$median_rank
-  results$rank <- seq_len(n_tests)
+  results$rank <- stats::ave(seq_len(n_tests), results$family, FUN = seq_along)
   rownames(results) <- NULL
   results <- results[, c("rank", "family", "metric", "variable", "type", "test", "n", "df",
                          "statistic", "effect_name", "effect", "effect_adj", "p", "q", "stability",
                          "median_rank", "dispersion_p", "verdict")]
 
+  # A variable's best test is its best rank within a family (alpha first on a tie), not its
+  # largest effect, which would compare across families.
   by_variable <- do.call(rbind, lapply(unique(results$variable), function(v) {
     j <- which(results$variable == v)
+    b <- j[order(results$rank[j], results$family[j] != "alpha")[1]]
     in_top <- !is.na(stab$ranks[j, , drop = FALSE]) & stab$ranks[j, , drop = FALSE] <= top_k
+    rankable <- !is.na(results$stability[j])
     data.frame(
-      variable = v, type = results$type[j[1]],
-      best_family = results$family[j[1]], best_metric = results$metric[j[1]],
-      best_effect_name = results$effect_name[j[1]], best_effect = results$effect_adj[j[1]],
-      best_effect_raw = results$effect[j[1]],
+      variable = v, type = results$type[b],
+      best_family = results$family[b], best_metric = results$metric[b],
+      best_rank = results$rank[b],
+      best_effect_name = results$effect_name[b], best_effect = results$effect_adj[b],
+      best_effect_raw = results$effect[b],
       n_tests = length(j), n_q05 = sum(results$q[j] < 0.05),
-      stability = mean(colSums(in_top) > 0),
+      stability = if (any(rankable)) {
+        mean(colSums(in_top[rankable, , drop = FALSE]) > 0)
+      } else NA_real_,
       stringsAsFactors = FALSE)
   }))
+  by_variable <- by_variable[order(by_variable$best_rank, -by_variable$n_q05), , drop = FALSE]
+  rownames(by_variable) <- NULL
 
   structure(
     list(results = results,
@@ -393,10 +411,20 @@ ap_screen_stability <- function(specs, mats, n_resample, fraction, top_k, seed) 
     }
   }
 
-  ranks <- apply(eff, 2, function(e) rank(-e, ties.method = "min", na.last = "keep"))
-  ranks <- matrix(ranks, nrow = n_tests)
+  # Ranked within each family, like the results.
+  fam <- vapply(specs, `[[`, character(1), "family")
+  ranks <- matrix(NA_real_, nrow = n_tests, ncol = n_resample)
+  for (f in unique(fam)) {
+    j <- which(fam == f)
+    ranks[j, ] <- matrix(apply(eff[j, , drop = FALSE], 2, function(e)
+      rank(-e, ties.method = "min", na.last = "keep")), nrow = length(j))
+  }
+  stability <- rowMeans(!is.na(ranks) & ranks <= top_k)
+  # In a family of top_k or fewer tests, every row is in the top k by construction.
+  small <- names(which(table(fam) <= top_k))
+  stability[fam %in% small] <- NA_real_
   list(
-    stability = rowMeans(!is.na(ranks) & ranks <= top_k),
+    stability = stability,
     median_rank = apply(ranks, 1, stats::median, na.rm = TRUE),
     ranks = ranks,
     resamples = resamples
@@ -419,13 +447,13 @@ print.ap_screen <- function(x, n = 20L, ...) {
                  x$expected_false_positives)
   cli::cli_alert_warning("{msg}")
   msg <- sprintf(paste0("Ranked by variance explained adjusted for degrees of freedom, not by p. ",
-                        "Stability is the share of %d ",
+                        "Alpha and beta are ranked separately. Stability is the share of %d ",
                         "subsamples (%.0f%% of samples, without replacement, seed %s) in which ",
-                        "the row ranks in the top %d."),
+                        "the row ranks in the top %d of its family."),
                  x$n_resample, 100 * x$fraction, x$seed, x$top_k)
   cli::cli_text("{msg}")
 
-  r <- utils::head(x$results, n)
+  r <- do.call(rbind, lapply(split(x$results, x$results$family), utils::head, n))
   out <- data.frame(
     rank = r$rank,
     variable = r$variable,
@@ -435,13 +463,13 @@ print.ap_screen <- function(x, n = 20L, ...) {
     raw = sprintf("%.4f", r$effect),
     p = format.pval(r$p, digits = 2),
     q = format.pval(r$q, digits = 2),
-    stable = sprintf("%.0f%%", 100 * r$stability),
+    stable = ifelse(is.na(r$stability), "-", sprintf("%.0f%%", 100 * r$stability)),
     verdict = ifelse(is.na(r$verdict), "-", r$verdict),
     stringsAsFactors = FALSE
   )
   print(out, row.names = FALSE)
   if (nrow(x$results) > n) {
-    more <- nrow(x$results) - n
+    more <- nrow(x$results) - nrow(r)
     cli::cli_text("{more} more row{?s} in {.code $results}.")
   }
 
@@ -449,10 +477,10 @@ print.ap_screen <- function(x, n = 20L, ...) {
   bv <- x$by_variable
   print(data.frame(
     variable = bv$variable,
-    best = sprintf("%s %.4f (%s, %s)", ap_effect_abbrev(bv$best_effect_name), bv$best_effect,
-                   bv$best_family, bv$best_metric),
+    best = sprintf("%s %.4f (%s, %s, rank %d)", ap_effect_abbrev(bv$best_effect_name),
+                   bv$best_effect, bv$best_family, bv$best_metric, as.integer(bv$best_rank)),
     `q<0.05` = sprintf("%d/%d", bv$n_q05, bv$n_tests),
-    stable = sprintf("%.0f%%", 100 * bv$stability),
+    stable = ifelse(is.na(bv$stability), "-", sprintf("%.0f%%", 100 * bv$stability)),
     check.names = FALSE, stringsAsFactors = FALSE
   ), row.names = FALSE)
 

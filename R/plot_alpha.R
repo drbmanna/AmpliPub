@@ -51,7 +51,8 @@ ap_plot_alpha <- function(alpha,
   ap_assert(nrow(df) > 0L, "Nothing to plot: every value is missing for `{group}`.")
 
   df$grp <- factor(as.character(df$grp))
-  df$metric <- factor(df$metric, levels = metrics, labels = ap_metric_label(metrics))
+  df$metric <- factor(df$metric, levels = metrics,
+                      labels = if (publication) ap_metric_label_pub(metrics) else ap_metric_label(metrics))
 
   if (publication) return(ap_plot_alpha_pub(df, type, points, pub, group))
 
@@ -149,18 +150,34 @@ ap_plot_alpha_pub <- function(df, type, points, pub, group) {
 #' @return A character vector, one line per entry.
 #' @export
 ap_alpha_legend <- function(alpha, test = NULL) {
-  out <- ap_alpha_caption(alpha)
+  out <- c(ap_alpha_caption(alpha), ap_alpha_names_note(unique(alpha$values$metric)))
   if (!is.null(test)) {
     r <- test$results
     out <- c(out, vapply(seq_len(nrow(r)), function(i) {
       sprintf("%s: %s, n = %d, q = %s, %s = %.3f%s.",
-              gsub("\n", " ", ap_metric_label(r$metric[i])), r$test[i], r$n[i],
+              ap_metric_label_pub(r$metric[i]), r$test[i], r$n[i],
               format.pval(r$p_adj[i], digits = 2), r$effect[i], r$estimate[i],
               if (is.na(r$ci_low[i])) "" else
                 sprintf(" (95%% CI %.3f to %.3f)", r$ci_low[i], r$ci_high[i]))
     }, character(1)))
   }
   out
+}
+
+# The publication figures say "Shannon" and "Inverse Simpson"; the legend says what number
+# that is, and why Chao1 is absent when it is.
+#' @keywords internal
+ap_alpha_names_note <- function(metrics) {
+  c(
+    if (any(c("q1", "q2") %in% metrics)) {
+      paste0("Shannon and inverse Simpson are the Hill numbers of order 1 and 2 (exp(H) and ",
+             "1/sum(p^2)), in effective numbers of features; richness is the order-0 Hill number.")
+    },
+    if (!any(c("chao1", "ace") %in% metrics)) {
+      paste0("Chao1 and ACE are not reported: both estimate unseen richness from singletons, ",
+             "which denoising removes.")
+    }
+  )
 }
 
 #' @keywords internal

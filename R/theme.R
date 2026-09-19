@@ -68,14 +68,30 @@ ap_scale_colour <- function(n, ...) {
 #' @keywords internal
 ap_metric_label <- function(metric) {
   labels <- c(
-    q0 = "Hill q0\n(observed richness)",
-    q1 = "Hill q1\n(effective no. of species)",
-    q2 = "Hill q2\n(dominant-weighted)",
+    q0 = "Hill q0\n(richness)",
+    q1 = "Hill q1\n(Shannon)",
+    q2 = "Hill q2\n(inverse Simpson)",
     evenness = "Pielou's evenness",
     faith_pd = "Faith's PD",
     shannon_entropy = "Shannon entropy (bits)",
     chao1 = "Chao1\n(estimated richness)",
     ace = "ACE\n(estimated richness)"
+  )
+  out <- unname(labels[metric])
+  ifelse(is.na(out), metric, out)
+}
+
+# Publication names: what a reader looks for. The report keeps the Hill order next to the
+# familiar name (ap_metric_label()); the publication legend says that Shannon and inverse
+# Simpson are the Hill numbers of order 1 and 2.
+#' @keywords internal
+ap_metric_label_pub <- function(metric) {
+  labels <- c(
+    q0 = "Richness", q1 = "Shannon", q2 = "Inverse Simpson",
+    evenness = "Pielou's evenness", faith_pd = "Faith's PD",
+    shannon_entropy = "Shannon entropy (bits)", chao1 = "Chao1", ace = "ACE",
+    bray_curtis = "Bray-Curtis", jaccard = "Jaccard",
+    unweighted_unifrac = "Unweighted UniFrac", weighted_unifrac = "Weighted UniFrac"
   )
   out <- unname(labels[metric])
   ifelse(is.na(out), metric, out)

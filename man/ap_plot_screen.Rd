@@ -4,12 +4,30 @@
 \alias{ap_plot_screen}
 \title{Plot an exploratory screen}
 \usage{
-ap_plot_screen(screen, n = 20L)
+ap_plot_screen(
+  screen,
+  n = 20L,
+  publication = FALSE,
+  family = c("alpha", "beta"),
+  pub = ap_pub_options()
+)
 }
 \arguments{
 \item{screen}{An \code{ap_screen} object from \code{\link[=ap_screen]{ap_screen()}}.}
 
 \item{n}{Number of top rows to show. Default \code{20}.}
+
+\item{publication}{Draw the publication version instead: a heatmap for one \code{family},
+one row per variable and one column per metric, so every test is shown and none is
+cut off. Fill is the adjusted effect size; a dot marks q < 0.05, an open circle a beta
+test that is significant but whose groups also differ in dispersion. Alpha and beta
+are separate figures, with their own colour scales, because the two effect sizes are
+proportions of different variances. Both list the variables in the same order.
+Counts, rank stability and caveats go to \code{\link[=ap_screen_legend]{ap_screen_legend()}}.}
+
+\item{family}{For \code{publication = TRUE}: \code{"alpha"} or \code{"beta"}.}
+
+\item{pub}{\code{\link[=ap_pub_options]{ap_pub_options()}} for \code{publication = TRUE}.}
 }
 \value{
 A ggplot object.

@@ -178,16 +178,18 @@ fig("da_effects")
 
 # Exploratory screen
 
-Hypothesis-generating. Ranked by variance explained adjusted for degrees of freedom, with one
-multiple-testing correction across every test run.
+Hypothesis-generating. Ranked by variance explained adjusted for degrees of freedom, alpha and
+beta separately (they measure different variances), with one multiple-testing correction across
+every test run. The top 15 of each family are shown.
 
 A `verdict` of `-` means the row is not a beta-diversity test, so there is no dispersion
 result to qualify it. It does not mean the test was inconclusive. Read these as candidates to
 test properly, not as findings.
 
 ```{r screen}
-tbl(utils::head(res$screen$results[, c("rank", "variable", "family", "metric", "effect_name",
-                                       "effect_adj", "p", "q", "stability", "verdict")], 30))
+scr <- res$screen$results[, c("rank", "variable", "family", "metric", "effect_name",
+                              "effect_adj", "p", "q", "stability", "verdict")]
+tbl(do.call(rbind, lapply(split(scr, scr$family), utils::head, 15)))
 ```
 
 ```{r screen-fig, results = "asis"}

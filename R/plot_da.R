@@ -286,16 +286,23 @@ ap_plot_concordance_pub <- function(concordance, max_features, pub) {
     ggplot2::geom_point(data = tested,
                         ggplot2::aes(size = .data$neglog_q, colour = .data$colour, shape = .data$kind),
                         stroke = 0.5) +
+    # Only a layer that draws something may draw a legend key; two layers keying the same
+    # shape drew concentric circles.
     ggplot2::geom_point(data = absent,
                         ggplot2::aes(colour = .data$colour, shape = .data$kind),
-                        size = 2.2, stroke = 0.5) +
+                        size = 2.2, stroke = 0.5, show.legend = nrow(absent) > 0L) +
     ggplot2::scale_colour_manual(
       values = c(Enriched = "#B2182B", Depleted = "#2166AC",
                  `Failed sensitivity analysis` = "grey45"),
       breaks = c("Enriched", "Depleted"), name = NULL) +
+    # A filled dot is an ordinary call and needs no key; only the exceptions are keyed.
     ggplot2::scale_shape_manual(values = c(Tested = 16, `Absent from one group` = 17,
                                            `Failed sensitivity analysis` = 1),
+                                breaks = intersect(c("Absent from one group",
+                                                     "Failed sensitivity analysis"), d$kind),
                                 drop = TRUE, name = NULL) +
+    ggplot2::guides(shape = ggplot2::guide_legend(
+      override.aes = list(size = 2, colour = "grey45"))) +
     ggplot2::scale_size_continuous(name = expression(-log[10] ~ italic(q)), range = c(1, 3.5)) +
     ggplot2::scale_y_discrete(labels = expr[levels(d$label)]) +
     ggplot2::scale_x_discrete(drop = FALSE, position = "top") +
@@ -306,7 +313,9 @@ ap_plot_concordance_pub <- function(concordance, max_features, pub) {
                    panel.grid.major = ggplot2::element_line(colour = "grey92", linewidth = 0.2),
                    legend.box = "vertical", legend.spacing.y = ggplot2::unit(0, "mm"),
                    legend.margin = ggplot2::margin(0, 0, 0, 0),
-                   legend.text = ggplot2::element_text(size = 6))
+                   legend.text = ggplot2::element_text(size = 6),
+                   # At 7 pt "ANCOM-BC2" and "ALDEx2" run into each other in 89 mm.
+                   axis.text.x.top = ggplot2::element_text(size = 6))
   attr(p, "ap_pub_size") <- list(width = "single", height = min(247, max(60, 4.2 * nrow(feat) + 38)))
   p
 }
@@ -539,7 +548,7 @@ ap_plot_da_primary_effect <- function(rows, concordance, primary, pub = NULL) {
   # columns before the panel gets too narrow to read.
   width <- if (max(nchar(sub("^[a-z]__", "", rows$label))) > 26L) "onehalf" else "single"
   n_lines <- nrow(rows) + nrow(heads)
-  attr(p, "ap_pub_size") <- list(width = width, height = min(247, max(28, 3 * n_lines + 24)))
+  attr(p, "ap_pub_size") <- list(width = width, height = min(247, max(22, 3 * n_lines + 18)))
   attr(p, "ap_n_called") <- c(up = rows$n_called_up[1], down = rows$n_called_down[1])
   attr(p, "ap_heads") <- heads
   p
