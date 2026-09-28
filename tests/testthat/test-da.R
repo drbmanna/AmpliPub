@@ -396,3 +396,70 @@ test_that("real ancombc2 declares a planted structural zero and AmpliPub keeps i
   expect_equal(row$direction, 1)
   expect_true(row$significant)
 })
+
+# The pooled prevalence filter can drop a feature that is common in one group and
+# rare in the other. The filter is left pooled on purpose (a per-group filter uses
+# the labels and can inflate false positives); instead these features are exposed.
+# Success criteria fixed before looking: a one-group feature below the pooled cut is
+# flagged, a feature rare in both groups is not, and a feature that never qualifies
+# yields no table.
+test_that("ap_da_filter_removed flags one-group features and ignores rare-in-both", {
+  g <- factor(rep(c("case", "control"), each = 20L))
+  ids <- c("common1", "common2", "common3", "grp_specific", "rare_both", "absent")
+  counts <- matrix(0L, length(ids), 40L,
+                   dimnames = list(ids, paste0("s", seq_len(40))))
+  counts["common1", ] <- 5L                     # present everywhere -> kept
+  counts["common2", 1:30] <- 3L                  # 75% -> kept
+  counts["common3", 1:25] <- 2L                  # 62.5% -> kept
+  counts["grp_specific", 1:3] <- 4L              # 3/20 case, 0 control; pooled 7.5%
+  counts["rare_both", c(1L, 21L)] <- 4L          # 5% in each group; pooled 5%
+  # "absent" is present nowhere.
+  prevalence <- rowMeans(counts > 0)
+  keep <- prevalence >= 0.1
+  fr <- ap_da_filter_removed(counts, g, prevalence, keep, 0.1)
+
+  expect_true("grp_specific" %in% fr$feature)     # one-group, below pooled cut
+  expect_false("rare_both" %in% fr$feature)       # rare in both, correctly ignored
+  expect_false("absent" %in% fr$feature)
+  # A kept feature is never in the table: the filter did not remove it.
+  expect_length(intersect(fr$feature, names(keep)[keep]), 0L)
+  expect_true(all(c("prevalence_pooled", "prev_case", "prev_control") %in% names(fr)))
+  expect_equal(fr$prev_case[fr$feature == "grp_specific"], 0.15)
+  expect_equal(fr$prev_control[fr$feature == "grp_specific"], 0)
+  expect_equal(fr$prevalence_pooled[fr$feature == "grp_specific"], 0.075)
+})
+
+test_that("ap_da_filter_removed returns NULL when nothing qualifies", {
+  g <- factor(rep(c("a", "b"), each = 10L))
+  ids <- c("common", "rare_both")
+  counts <- matrix(0L, 2L, 20L, dimnames = list(ids, paste0("s", seq_len(20))))
+  counts["common", ] <- 5L                        # kept, not removed
+  counts["rare_both", c(1L, 11L)] <- 4L            # 10% each; pooled 10% -> kept at 0.1
+  prevalence <- rowMeans(counts > 0)
+  # Use a higher cut so rare_both is removed but never reaches the cut in a group.
+  keep <- prevalence >= 0.2
+  expect_null(ap_da_filter_removed(counts, g, prevalence, keep, 0.2))
+})
+
+test_that("ap_da records a group-specific removed feature, warns, and does not test it", {
+  skip_if_not_installed("ANCOMBC")
+  g <- rep(c("a", "b"), each = 20L)
+  ids <- c(paste0("keep", 1:5), "grp_only", "rare_both")
+  cnt <- matrix(0L, length(ids), 40L, dimnames = list(ids, paste0("s", seq_len(40))))
+  for (k in 1:5) cnt[paste0("keep", k), ] <- 5L
+  cnt["grp_only", which(g == "a")[1:3]] <- 8L      # 3/20 in a, pooled 7.5%
+  cnt["rare_both", c(1L, 21L)] <- 8L               # 5% each group
+  x <- ap_import(cnt, data.frame(group = g, row.names = colnames(cnt)))
+  kept <- paste0("keep", 1:5)
+  local_mocked_bindings(ancombc2 = function(...) list(res = fake_ancombc2_out(kept)),
+                        .package = "ANCOMBC")
+  da <- NULL
+  expect_message(da <- ap_da(x, "group", method = "ancombc2", reference = "a"),
+                 "filter_removed")
+  expect_false(is.null(da$filter_removed))
+  expect_true("grp_only" %in% da$filter_removed$feature)
+  expect_false("rare_both" %in% da$filter_removed$feature)
+  # Left out of the test entirely: the calls are unchanged by the disclosure.
+  expect_false("grp_only" %in% da$results$feature)
+  expect_equal(da$filter_removed$prev_a[da$filter_removed$feature == "grp_only"], 0.15)
+})

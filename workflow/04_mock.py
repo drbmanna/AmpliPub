@@ -467,7 +467,7 @@ def run(args) -> None:
                         "evidence about the pipeline", sample, r["reads"],
                         args.low_depth_note)
     log.info("for comparison, not as a threshold: Kozich et al. 2013 report a V4 error "
-             "rate of 0.01%% after preclustering and 37.2-43.4 mock OTUs against 20 "
+             "rate of 0.01% after preclustering and 37.2-43.4 mock OTUs against 20 "
              "expected with UCHIME; Callahan et al. 2016 report 40 exact matches and 2 "
              "spurious on the HMP mock. Those are OTUs and ASVs from other datasets, not "
              "the same unit as these numbers")

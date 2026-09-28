@@ -47,7 +47,13 @@ to be tested. Applied once, to all methods. Default \code{0.1}.}
 }
 \value{
 An object of class \code{ap_da}: a list with \code{results} (one row per
-feature per method) and the settings used.
+feature per method) and the settings used. When the pooled prevalence filter
+drops features that reach \code{prv_cut} within at least one group, those features
+are listed in \code{filter_removed} (feature, pooled prevalence, per-group
+prevalence, taxon label when available), ranked by their highest per-group
+prevalence; it is \code{NULL} otherwise. The filter is pooled, and unchanged, on
+purpose: a per-group filter uses the group labels and can inflate the false
+positive rate. \code{filter_removed} exposes what the pooled filter hides.
 }
 \description{
 Runs one or more differential abundance methods on a common, pre-filtered

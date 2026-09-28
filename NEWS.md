@@ -1,3 +1,43 @@
+# AmpliPub 0.0.2
+
+## Differential abundance
+
+* The prevalence filter is still pooled over the compared groups, on purpose: a per-group
+  filter uses the group labels and can inflate the false positive rate. It now also reports
+  what that costs. `ap_da()` returns a `filter_removed` table listing features dropped by the
+  pooled filter that reach `prv_cut` within at least one group, with pooled and per-group
+  prevalence, ranked by their highest per-group prevalence. The print method, the reader's
+  guide, the methods section, the preprocessing summary and the figure legends all note these
+  features when present. On Baxter this surfaces the cancer-associated *Peptostreptococcus*
+  and *Porphyromonas* ASVs that the pooled cut had removed silently. Calls are unchanged.
+* The methods section and the preprocessing summary now state that ANCOM-BC2 detects
+  structural zeros and calls them on direction alone, without an effect or a p-value.
+
+## Workflow
+
+* `quality` now cross-checks `amplicon_len` against the region the configured primers cut
+  from the mock reference, before the denoising run rather than after it. The primer pair
+  and `amplicon_len` are independent settings that have to describe one region, and nothing
+  caught them disagreeing: the overlap floor is built from `amplicon_len`, so a value left
+  at V4's 253 bp while the primers amplify V3-V4 passes the overlap check, DADA2 runs to
+  completion, and almost nothing merges. Groundwork for longer amplicon regions.
+* The check is skipped, and says so in the log, when no mock reference is configured. An
+  unverified number that looks verified is worse than one known to be unchecked.
+* New `quality.len_tolerance` (default 50 bp), a chosen value and not a published
+  threshold: within one region references vary by tens of bases, between regions by
+  hundreds.
+
+## Reporting fixes
+
+* The figure legend no longer gives denoising as the reason Chao1 and ACE are absent unless
+  the table really has no singletons. AmpliPub accepts any abundance table, and on an OTU
+  table that kept its singletons that reason was false. `ap_alpha()` now records
+  `has_singletons` from the input table, before rarefaction.
+* Taxonomic composition legends name the grouping variable through its configured
+  publication label rather than the raw column name.
+* `04_mock.py` logged a literal `0.01%%` for the Kozich et al. error rate, because the
+  logging call passes no `%`-arguments and so does no `%`-substitution.
+
 # AmpliPub 0.0.1
 
 First public release.

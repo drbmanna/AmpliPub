@@ -13,6 +13,8 @@ Standard library only.
 
 from __future__ import annotations
 
+import statistics
+
 IUPAC = {"A": "A", "C": "C", "G": "G", "T": "T",
          "R": "AG", "Y": "CT", "S": "CG", "W": "AT", "K": "GT", "M": "AC",
          "B": "CGT", "D": "AGT", "H": "ACT", "V": "ACG", "N": "ACGT"}
@@ -125,6 +127,61 @@ def group_by_region(records: dict[str, str], fwd: str, rev: str,
         raise RegionError("no reference record yielded a region between the primers. "
                           "Check the primers and the reference orientation")
     return groups, missing
+
+
+def region_lengths(records: dict[str, str], fwd: str, rev: str,
+                   max_mismatch: int) -> tuple[list[int], list[str]]:
+    """Length of the region each reference yields between the primers.
+
+    Returns the sorted lengths, one per record that yielded a region, and the names of
+    the records where a primer site was absent. A reference trimmed to start inside the
+    amplicon has lost its primer site and lands in the second list; that is normal for
+    some databases and is reported rather than treated as an error.
+    """
+    lengths: list[int] = []
+    missing: list[str] = []
+    for name, seq in records.items():
+        region = extract_region(seq, fwd, rev, max_mismatch)
+        if region is None or not region:
+            missing.append(name)
+            continue
+        lengths.append(len(region))
+    return sorted(lengths), missing
+
+
+def check_amplicon_len(lengths: list[int], missing: list[str], configured: int,
+                       tolerance: int) -> dict[str, object]:
+    """Refuse a configured amplicon length the references do not support.
+
+    `quality.amplicon_len` and the primer pair are two independent settings that have to
+    describe the same region. Nothing downstream catches them disagreeing: the overlap
+    floor is amplicon + min overlap + margin, so a length left too short passes the check
+    trivially, DADA2 runs to completion, and almost nothing merges. The cost is a full
+    denoising run, and the symptom appears only as a flagged read loss afterwards.
+
+    The tolerance exists to catch a region mix-up (V4's 253 bp against V3-V4's ~465), not
+    to police natural variation. Within one region references vary by tens of bases;
+    between regions they differ by hundreds. No published source sets this number, so it
+    is a chosen value stated plainly, not a standard, and it is a CLI flag.
+    """
+    if not lengths:
+        raise RegionError(
+            f"no reference yielded a region between the primers ({len(missing)} checked). "
+            "The primers do not match this reference, or it is in the other orientation. "
+            "Nothing can be concluded about the amplicon length.")
+    median = int(statistics.median(lengths))
+    summary = {"n_found": len(lengths), "n_missing": len(missing), "median": median,
+               "min": lengths[0], "max": lengths[-1], "configured": configured,
+               "tolerance": tolerance}
+    if abs(median - configured) > tolerance:
+        raise RegionError(
+            f"configured amplicon_len {configured} bp, but the primers cut these references "
+            f"to a median of {median} bp (range {lengths[0]}-{lengths[-1]}, n = {len(lengths)}), "
+            f"a difference of {abs(median - configured)} bp above the {tolerance} bp tolerance. "
+            "The primer pair and amplicon_len describe different regions. Fix whichever is "
+            "wrong before denoising: the overlap floor is built from amplicon_len, so a wrong "
+            "value passes the overlap check and DADA2 then merges almost nothing.")
+    return summary
 
 
 def hamming(a: str, b: str) -> int:

@@ -164,17 +164,28 @@ rule primers:
 
 
 rule quality:
-    input: rules.primers.output.trimmed
+    input:
+        reads=rules.primers.output.trimmed,
+        # Optional. When a mock reference is configured it is used to check that
+        # amplicon_len and the primer pair describe the same region; without one that
+        # number stays unverified and the log says so.
+        reference=rules.reference_mock.output if USE_MOCK_REF else [],
     output: str(Q2 / "quality" / "trunc_len.tsv")
     log: str(LOGS / "02_quality.log")
     benchmark: str(BENCH / "02_quality.tsv")
     params:
         py=PY, wf=WF, outdir=Q2 / "quality", env=ENV["qiime2"], q=config["quality"],
+        ref=lambda wc, input: (
+            f"--reference {input.reference} "
+            f"--forward {config['primers']['forward']} "
+            f"--reverse {config['primers']['reverse']} "
+            f"--len-tolerance {config['quality'].get('len_tolerance', 50)}"
+        ) if input.reference else "",
     shell:
-        "{params.py} {params.wf}/02_quality.py -i {input} -o {params.outdir} "
+        "{params.py} {params.wf}/02_quality.py -i {input.reads} -o {params.outdir} "
         "--min-q {params.q[min_q]} --amplicon-len {params.q[amplicon_len]} "
         "--min-overlap {params.q[min_overlap]} --margin {params.q[margin]} --n {params.q[n]} "
-        "--env {params.env} > {log} 2>&1"
+        "{params.ref} --env {params.env} > {log} 2>&1"
 
 
 rule dada2:

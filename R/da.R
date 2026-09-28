@@ -53,7 +53,13 @@ ap_da_methods <- function() c("ancombc2", "aldex2", "linda", "maaslin2")
 #' @param mc_samples ALDEx2 Monte Carlo instances. Default `128`.
 #'
 #' @return An object of class `ap_da`: a list with `results` (one row per
-#'   feature per method) and the settings used.
+#'   feature per method) and the settings used. When the pooled prevalence filter
+#'   drops features that reach `prv_cut` within at least one group, those features
+#'   are listed in `filter_removed` (feature, pooled prevalence, per-group
+#'   prevalence, taxon label when available), ranked by their highest per-group
+#'   prevalence; it is `NULL` otherwise. The filter is pooled, and unchanged, on
+#'   purpose: a per-group filter uses the group labels and can inflate the false
+#'   positive rate. `filter_removed` exposes what the pooled filter hides.
 #'
 #' @section What counts as significant:
 #' A feature is significant for a method when its adjusted p-value is below
@@ -119,6 +125,17 @@ ap_da <- function(x,
     "Prevalence filter at {prv_cut}: {sum(keep)} of {length(keep)} features tested. ",
     "The same set goes to every method, so the FDR denominators are comparable."
   ))
+
+  # The filter is pooled over the compared groups. That is deliberate: a per-group
+  # filter uses the group labels, so it is not independent of the test under the
+  # null and can inflate the false positive rate. The cost is that a feature common
+  # in one group and rare in the other can fall below the pooled cut and never be
+  # tested. Rather than change the filter, expose exactly those features: removed by
+  # the pooled cut, yet reaching prv_cut within at least one group. Computed here,
+  # on the full (sample-filtered) table, before the feature filter is applied.
+  filter_removed <- ap_da_filter_removed(counts, factor(as.character(meta[[group]])),
+                                         prevalence, keep, prv_cut)
+
   counts <- counts[keep, , drop = FALSE]
 
   g <- meta[[group]]
@@ -196,6 +213,19 @@ ap_da <- function(x,
   rd <- as.data.frame(SummarizedExperiment::rowData(x))
   if ("genus" %in% colnames(rd)) {
     results$taxon_label <- ap_taxon_label(rd, "genus")[match(results$feature, rownames(rd))]
+    if (!is.null(filter_removed)) {
+      filter_removed$taxon_label <-
+        ap_taxon_label(rd, "genus")[match(filter_removed$feature, rownames(rd))]
+    }
+  }
+
+  if (!is.null(filter_removed)) {
+    nfr <- nrow(filter_removed)
+    cli::cli_alert_warning(paste0(
+      "{nfr} feature{?s} removed by the pooled prevalence filter ",
+      "reach{?es/} {prv_cut} in at least one group and {cli::qty(nfr)}{?was/were} not tested. ",
+      "See the `filter_removed` element of the result."
+    ))
   }
 
   structure(
@@ -204,9 +234,41 @@ ap_da <- function(x,
          methods = setdiff(method, skipped), skipped = skipped,
          covariates = covariates, subject = subject,
          prv_cut = prv_cut, alpha = alpha, p_adj_method = p_adj_method,
+         filter_removed = filter_removed,
          seed = seed, n_features = nrow(counts), n_samples = ncol(counts)),
     class = "ap_da"
   )
+}
+
+# Features the pooled prevalence filter drops that are nonetheless common in at
+# least one group. Returns NULL when there are none, so callers can test for it.
+# `counts` is the full (sample-filtered) table before the feature filter; `g` is
+# the group factor; `prevalence` and `keep` are the pooled vectors already computed.
+#' @keywords internal
+ap_da_filter_removed <- function(counts, g, prevalence, keep, prv_cut) {
+  removed <- !keep
+  if (!any(removed)) return(NULL)
+
+  pres <- (counts[removed, , drop = FALSE] > 0) * 1L      # features x samples
+  gp_counts <- rowsum(t(pres), g)                         # groups x features
+  sizes <- as.vector(table(g)[rownames(gp_counts)])       # aligned to row order
+  grp_prev <- t(gp_counts / sizes)                        # features x groups
+  max_prev <- apply(grp_prev, 1L, max)
+
+  sel <- max_prev >= prv_cut
+  if (!any(sel)) return(NULL)
+
+  grp_prev <- grp_prev[sel, , drop = FALSE]
+  ord <- order(-max_prev[sel])
+  out <- data.frame(
+    feature = rownames(grp_prev),
+    prevalence_pooled = unname(prevalence[rownames(grp_prev)]),
+    stringsAsFactors = FALSE
+  )
+  for (lv in colnames(grp_prev)) out[[paste0("prev_", lv)]] <- grp_prev[, lv]
+  out <- out[ord, , drop = FALSE]
+  rownames(out) <- NULL
+  out
 }
 
 #' @keywords internal
@@ -283,6 +345,15 @@ print.ap_da <- function(x, ...) {
     cli::cli_alert_warning(paste0(
       "{n_fail} call{?s} had adjusted p below {x$alpha} but failed the method's own ",
       "sensitivity analysis, and {?is/are} not counted as significant."
+    ))
+  }
+
+  if (!is.null(x$filter_removed)) {
+    nfr <- nrow(x$filter_removed)
+    cli::cli_alert_warning(paste0(
+      "{nfr} feature{?s} removed by the pooled prevalence filter ",
+      "reach{?es/} {x$prv_cut} in at least one group and {cli::qty(nfr)}{?was/were} not tested ",
+      "(see `$filter_removed`)."
     ))
   }
 

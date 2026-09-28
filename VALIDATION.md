@@ -135,6 +135,14 @@ Each was fixed, and each has a test that fails if it comes back.
 - **Features removed by the differential abundance prevalence filter.** The 10% prevalence
   filter is computed over the compared groups together. On Baxter, cancer versus normal, it
   removed *Peptostreptococcus* and three *Porphyromonas* ASVs present in 17-21% of cancer
-  and 1-3% of normal samples, taxa the original study associates with cancer, and gave no
-  warning. *Parvimonas micra* (26% versus 5%) passed the filter and is called by three of
-  four methods. Reporting the removed, group-asymmetric features is planned for 0.0.2.
+  and 1-3% of normal samples, taxa the original study associates with cancer.
+  *Parvimonas micra* (26% versus 5%) passed the filter and is called by three of
+  four methods. Since 0.0.2 these features are reported rather than dropped in silence:
+  `ap_da()` returns a `filter_removed` table giving pooled and per-group prevalence for
+  every feature that reaches the cut in at least one group, warns when the table is not
+  empty, and carries the count into the report, the methods section and the figure legends.
+  On Baxter it lists 78 features, including the four above.
+  The filter itself is unchanged and still pooled, on purpose: a per-group filter uses the
+  group labels, so it is not independent of the test under the null and can inflate the
+  false positive rate. Disclosure is not a fix. The removed features are still not tested,
+  and deciding what to do with them is left to the reader.

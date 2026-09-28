@@ -1,4 +1,4 @@
-# AmpliPub 0.0.1
+# AmpliPub 0.0.2
 
 [![R-CMD-check](https://github.com/drbmanna/AmpliPub/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/drbmanna/AmpliPub/actions/workflows/R-CMD-check.yaml)
 [![workflow-tests](https://github.com/drbmanna/AmpliPub/actions/workflows/workflow-tests.yaml/badge.svg)](https://github.com/drbmanna/AmpliPub/actions/workflows/workflow-tests.yaml)
@@ -269,12 +269,15 @@ cancer, is called by three of the four differential abundance methods and is enr
 cancer. A pipeline that reported only the PERMANOVA p-value, or only one differential
 abundance method, would make the same data look like a clearer result than it is.
 
-**Known limitation in 0.0.1.** The other cancer-associated taxa the study reports were not
-tested. The differential abundance prevalence filter (present in 10% of samples) is
-computed over cancer and normal together, so it removed *Peptostreptococcus* and three
-*Porphyromonas* ASVs that occur in 17-21% of cancer samples and 1-3% of normal samples.
-The filter does this without a warning. From 0.0.2, features removed by the filter whose
-prevalence differs between groups will be listed in the output and the report.
+**The prevalence filter is pooled, and now says what it hides.** The differential abundance
+prevalence filter (present in 10% of samples) is computed over the compared groups together,
+so it can remove a feature common in one group and rare in the other. On cancer versus normal
+it removes *Peptostreptococcus* and three *Porphyromonas* ASVs that occur in 17-21% of cancer
+samples and 1-3% of normal samples. The filter stays pooled on purpose: a per-group filter
+uses the group labels and can inflate the false positive rate. From 0.0.2, `ap_da()` returns
+a `filter_removed` table listing exactly these features, with pooled and per-group prevalence,
+and the print, report, methods section and figure legends flag them. The calls themselves are
+unchanged; the disclosure is what changed.
 
 ## Roadmap
 

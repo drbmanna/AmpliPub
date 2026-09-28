@@ -97,6 +97,7 @@ properties:
       min_overlap: {type: integer, default: 12}
       margin: {type: integer, default: 20}
       n: {type: integer, default: 10000}
+      len_tolerance: {type: integer, default: 50}
     required: [min_q, amplicon_len, min_overlap, margin, n]
 
   dada2:

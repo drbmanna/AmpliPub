@@ -86,10 +86,13 @@ ap_preprocessing_summary <- function(res) {
     d <- res$da
     lv <- an$da_levels %||% character(0)
     filt <- c(if (length(lv)) sprintf("samples restricted to %s", paste(unlist(lv), collapse = ", ")),
-              sprintf("features present in fewer than %s of those samples removed, once, for all methods",
-                      pct(d$prv_cut)))
+              sprintf("features present in fewer than %s of those samples removed, once, for all methods (pooled over groups)",
+                      pct(d$prv_cut)),
+              if (!is.null(d$filter_removed))
+                sprintf("%d removed feature%s reached the cut within one group; recorded in filter_removed, not tested",
+                        nrow(d$filter_removed), if (nrow(d$filter_removed) == 1L) "" else "s"))
     method_norm <- c(
-      ancombc2 = "ANCOM-BC2: bias-corrected log abundance from non-zero counts; calls must pass its pseudocount sensitivity analysis",
+      ancombc2 = "ANCOM-BC2: bias-corrected log abundance from non-zero counts; calls must pass its pseudocount sensitivity analysis; structural zeros (absent from one group) are called on direction alone, without an effect or p-value",
       aldex2 = "ALDEx2: CLR over Monte Carlo Dirichlet instances, all features as denominator",
       linda = "LinDA: CLR with LinDA's adaptive zero handling (package defaults)",
       maaslin2 = "MaAsLin2: total-sum scaling, then log"

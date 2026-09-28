@@ -43,11 +43,19 @@ from datetime import datetime, timezone
 
 __version__ = "0.1.0"
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from amplicon_regions import (  # noqa: E402
+    RegionError, check_amplicon_len, read_fasta, region_lengths,
+)
+
 MIN_Q = 30          # median quality a position must reach to be kept
 AMPLICON_LEN = 253  # V4, 515F to 806R, primers excluded
 MIN_OVERLAP = 12    # qiime dada2 denoise-paired --p-min-overlap default in 2025.7
 MARGIN = 20         # allowance for V4 length variation between taxa
 N_SAMPLED = 10000   # qiime demux summarize --p-n default
+LEN_TOLERANCE = 50  # bp between amplicon_len and what the primers cut from a reference.
+#                     Chosen, not published: within one region references vary by tens of
+#                     bases, between regions by hundreds, so this sits in the gap.
 
 log = logging.getLogger("quality")
 
@@ -191,6 +199,15 @@ def parse_args(argv):
                    help=f"DADA2 minimum overlap (default {MIN_OVERLAP}, as in QIIME 2 2025.7)")
     p.add_argument("--margin", type=int, default=MARGIN,
                    help=f"extra overlap for amplicon length variation (default {MARGIN})")
+    p.add_argument("--reference", help="reference FASTA to check --amplicon-len against, "
+                                       "using the primers the reads were trimmed with")
+    p.add_argument("--forward", help="forward primer, required with --reference")
+    p.add_argument("--reverse", help="reverse primer, required with --reference")
+    p.add_argument("--max-mismatch", type=int, default=2,
+                   help="mismatches allowed per primer site in the reference (default 2)")
+    p.add_argument("--len-tolerance", type=int, default=LEN_TOLERANCE,
+                   help=f"bp that --amplicon-len may differ from the reference median "
+                        f"(default {LEN_TOLERANCE}, a chosen value, not a published one)")
     p.add_argument("--n", type=int, default=N_SAMPLED,
                    help=f"reads sampled for the quality profile (default {N_SAMPLED})")
     p.add_argument("--env", default="amplipub-qiime2-2025.7", help="conda env with QIIME 2")
@@ -198,6 +215,47 @@ def parse_args(argv):
                    help="seconds before demux summarize is killed (default 3600)")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return p.parse_args(argv)
+
+
+def check_amplicon_against_reference(args) -> dict[str, object] | None:
+    """Cross-check --amplicon-len against what the primers cut from a reference.
+
+    Optional, because many runs have no reference FASTA to hand. Where there is none the
+    configured length stays unverified, and this says so rather than implying it was
+    checked: an unverified number that looks checked is worse than one known to be
+    unchecked.
+    """
+    if not args.reference:
+        log.info("amplicon_len %d bp is NOT verified against a reference: none given. "
+                 "Pass --reference with --forward and --reverse to have it checked "
+                 "(a wrong value passes the overlap floor and costs a full denoising run)",
+                 args.amplicon_len)
+        return None
+    if not (args.forward and args.reverse):
+        raise QualityError("--reference needs --forward and --reverse: the amplicon length "
+                           "is only defined by a primer pair.")
+    path = os.path.abspath(os.path.expanduser(args.reference))
+    if not os.path.isfile(path) or os.path.getsize(path) == 0:
+        raise QualityError(f"reference FASTA not found or empty: {path}")
+    try:
+        records = read_fasta(path)
+        lengths, missing = region_lengths(records, args.forward, args.reverse,
+                                          args.max_mismatch)
+        summary = check_amplicon_len(lengths, missing, args.amplicon_len,
+                                     args.len_tolerance)
+    except RegionError as exc:
+        raise QualityError(str(exc)) from exc
+    log.info("amplicon_len %d bp agrees with the reference: median %d bp "
+             "(range %d-%d, n = %d, tolerance %d)",
+             args.amplicon_len, summary["median"], summary["min"], summary["max"],
+             summary["n_found"], summary["tolerance"])
+    if summary["n_missing"]:
+        log.info("%d of %d references yielded no region at %d mismatches, so the median is "
+                 "taken over the rest; a database trimmed to the amplicon has lost its "
+                 "primer sites and does this legitimately",
+                 summary["n_missing"], summary["n_found"] + summary["n_missing"],
+                 args.max_mismatch)
+    return summary
 
 
 def run(args) -> None:
@@ -214,6 +272,12 @@ def run(args) -> None:
     log.info("rule: truncate before the first position with median quality < Q%g; "
              "floor %d + %d + %d = %d bp", args.min_q, args.amplicon_len, args.min_overlap,
              args.margin, args.amplicon_len + args.min_overlap + args.margin)
+
+    # Before the expensive call, because this is the cheap check that decides whether
+    # spending it is worth anything. amplicon_len and the primer pair are independent
+    # settings describing one region; when they disagree the overlap floor is built from
+    # the wrong number, passes, and DADA2 merges almost nothing.
+    check_amplicon_against_reference(args)
 
     qzv = os.path.join(outdir, "quality.qzv")
     rc, _, err = run_cmd(["conda", "run", "-n", args.env, "qiime", "demux", "summarize",

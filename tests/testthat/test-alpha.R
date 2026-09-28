@@ -280,3 +280,37 @@ test_that("each sample gets its own PD, in the right order, through ap_alpha", {
   a <- suppressWarnings(ap_alpha(x, metrics = "faith_pd", rarefy = FALSE))
   expect_equal(a$values$value[match(c("s1", "s2"), a$values$sample_id)], c(6, 4))
 })
+
+# The legend may name denoising as the reason Chao1 and ACE are absent only when the
+# table really has no singletons. AmpliPub takes any abundance table, so on an OTU
+# table that kept its singletons that reason would be a fabricated one.
+test_that("ap_alpha records whether the input table had singletons", {
+  denoised <- matrix(c(5L, 3L, 0L,
+                       0L, 4L, 9L), ncol = 2,
+                     dimnames = list(c("A", "B", "C"), c("s1", "s2")))
+  meta <- data.frame(g = c("a", "b"), row.names = c("s1", "s2"))
+  a <- suppressWarnings(ap_alpha(ap_import(denoised, meta), metrics = "q0", rarefy = FALSE))
+  expect_false(a$has_singletons)
+
+  otu <- denoised
+  otu["C", "s1"] <- 1L                       # a singleton the denoiser would have removed
+  b <- suppressWarnings(ap_alpha(ap_import(otu, meta), metrics = "q0", rarefy = FALSE))
+  expect_true(b$has_singletons)
+})
+
+test_that("the Chao1 legend sentence claims denoising only when there are no singletons", {
+  no_sing <- ap_alpha_names_note("q0", has_singletons = FALSE)
+  expect_match(paste(no_sing, collapse = " "), "denoising")
+
+  # Singletons present: absent for some other reason, so no cause is asserted.
+  with_sing <- ap_alpha_names_note("q0", has_singletons = TRUE)
+  expect_match(paste(with_sing, collapse = " "), "Chao1 and ACE are not reported")
+  expect_false(any(grepl("denoising", with_sing)))
+
+  # Unknown (an older ap_alpha, or a fractional table) falls through to neutral.
+  expect_false(any(grepl("denoising", ap_alpha_names_note("q0"))))
+
+  # Nothing is said at all when the metrics were actually reported.
+  expect_false(any(grepl("Chao1", ap_alpha_names_note(c("q0", "chao1"),
+                                                      has_singletons = FALSE))))
+})

@@ -678,6 +678,14 @@ ap_da_legend <- function(concordance, type = c("concordance", "volcano", "primar
     ap_da_contrast_line(concordance, pub),
     sprintf(paste0("Features present in fewer than %g%% of samples were removed once, for all ",
                    "methods. %s-adjusted p < %g."), 100 * da$prv_cut, da$p_adj_method, da$alpha),
+    if (!is.null(da$filter_removed)) {
+      n_fr <- nrow(da$filter_removed)
+      sprintf(paste0(
+        "The filter is pooled over groups; %d feature%s below the pooled cut %s it within one ",
+        "group and %s not tested (see the result's filter_removed table)."),
+        n_fr, if (n_fr == 1L) "" else "s",
+        if (n_fr == 1L) "reaches" else "reach", if (n_fr == 1L) "was" else "were")
+    },
     paste0("Called: ", paste(sprintf("%s %d", ap_da_method_title(names(n_by)), as.integer(n_by)),
                              collapse = ", "), "."),
     if (n_fail > 0L) sprintf(paste0("%d ANCOM-BC2 call%s had adjusted p < %g but failed its ",
@@ -727,6 +735,14 @@ ap_da_legend_primary <- function(concordance, primary, max_features, pub) {
     ap_da_contrast_line(concordance, pub),
     sprintf(paste0("Features present in fewer than %g%% of samples were removed once, for all ",
                    "methods. %s-adjusted p < %g."), 100 * da$prv_cut, da$p_adj_method, da$alpha),
+    if (!is.null(da$filter_removed)) {
+      n_fr <- nrow(da$filter_removed)
+      sprintf(paste0(
+        "The filter is pooled over groups; %d feature%s below the pooled cut %s it within one ",
+        "group and %s not tested (see the result's filter_removed table)."),
+        n_fr, if (n_fr == 1L) "" else "s",
+        if (n_fr == 1L) "reaches" else "reach", if (n_fr == 1L) "was" else "were")
+    },
     sprintf(paste0("Primary method %s. Points: %s with 95%% interval (estimate %s 1.96 SE, not ",
                    "adjusted for multiple testing). Right: q, the %s-adjusted p-value from %s's ",
                    "own test."),

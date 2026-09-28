@@ -227,12 +227,26 @@ ap_methods_section <- function(res, run_dir = NULL, provenance_dir = NULL) {
                                                        an$da_reference) else "",
                 if ("ancombc2" %in% meths) paste0(
                   " ANCOM-BC2 calls were required to pass its pseudocount sensitivity ",
-                  "analysis (the package's robust call).") else "",
+                  "analysis (the package's robust call). ANCOM-BC2 also flags structural ",
+                  "zeros, taxa absent from one group, and declares them differentially ",
+                  "abundant without estimating an effect or a p-value; these are reported ",
+                  "as calls carrying only a direction.") else "",
                 if (primary %in% meths) sprintf(paste0(
                   " %s was designated the primary method in the analysis configuration; its ",
                   "effect estimates are reported with 95%% Wald intervals (estimate %s 1.96 ",
                   "standard errors)."), ap_da_method_title(primary), "\u00b1") else "",
                 res$concordance$min_methods %||% length(meths)))
+    if (!is.null(res$da$filter_removed)) {
+      add(sprintf(paste0("The prevalence filter was pooled over the compared groups rather than ",
+                         "applied within each, because a within-group filter uses the group labels ",
+                         "and is not independent of the test under the null. %d feature%s fell below ",
+                         "the pooled threshold yet reached it within at least one group; %s recorded ",
+                         "with %s per-group prevalence and not tested."),
+                  nrow(res$da$filter_removed),
+                  if (nrow(res$da$filter_removed) == 1L) "" else "s",
+                  if (nrow(res$da$filter_removed) == 1L) "it was" else "these were",
+                  if (nrow(res$da$filter_removed) == 1L) "its" else "their"))
+    }
   }
 
   if (!is.null(res$screen)) {

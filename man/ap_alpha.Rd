@@ -35,7 +35,10 @@ or looks rarefied. Default \code{FALSE}. See the section on Chao1 and ACE.}
 }
 \value{
 An object of class \code{ap_alpha}: a list with \code{values} (a data frame of
-one row per sample per metric), \code{depth}, \code{n_iter}, \code{seed} and \code{dropped}.
+one row per sample per metric), \code{depth}, \code{n_iter}, \code{seed}, \code{dropped}, and
+\code{has_singletons}, recorded from the input table before rarefaction and used
+by the figure legend to decide whether denoising can be named as the reason
+Chao1 and ACE are absent (\code{NA} for a fractional table).
 }
 \description{
 Computes Hill numbers at q = 0, 1 and 2, Pielou's evenness, and Faith's

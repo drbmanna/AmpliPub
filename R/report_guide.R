@@ -178,6 +178,19 @@ ap_report_guide <- function(res) {
         "methods. The comparison is made against a stated reference level, which is",
         "recorded so the sign of an effect is unambiguous. Read the adjusted p-value, not",
         "the raw one.")
+    if (!is.null(res$da$filter_removed)) {
+      add("",
+          sprintf(paste0("**The prevalence filter is pooled over the compared groups**, so a ",
+                         "feature common in one group and rare in the other can fall below the ",
+                         "cut and never be tested. Here %d such feature%s did: removed by the ",
+                         "pooled filter, yet reaching the cut within at least one group. %s ",
+                         "listed in the `filter_removed` table with per-group prevalence. ",
+                         "The filter is left pooled on purpose (a per-group filter uses the group ",
+                         "labels and can inflate false positives); the table is the disclosure."),
+                  nrow(res$da$filter_removed),
+                  if (nrow(res$da$filter_removed) == 1L) "" else "s",
+                  if (nrow(res$da$filter_removed) == 1L) "It is" else "They are"))
+    }
   }
 
   if (!is.null(res$concordance)) {

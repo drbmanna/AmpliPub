@@ -150,7 +150,8 @@ ap_plot_alpha_pub <- function(df, type, points, pub, group) {
 #' @return A character vector, one line per entry.
 #' @export
 ap_alpha_legend <- function(alpha, test = NULL) {
-  out <- c(ap_alpha_caption(alpha), ap_alpha_names_note(unique(alpha$values$metric)))
+  out <- c(ap_alpha_caption(alpha),
+           ap_alpha_names_note(unique(alpha$values$metric), alpha$has_singletons))
   if (!is.null(test)) {
     r <- test$results
     out <- c(out, vapply(seq_len(nrow(r)), function(i) {
@@ -165,17 +166,25 @@ ap_alpha_legend <- function(alpha, test = NULL) {
 }
 
 # The publication figures say "Shannon" and "Inverse Simpson"; the legend says what number
-# that is, and why Chao1 is absent when it is.
+# that is, and why Chao1 is absent when it is. The denoising reason is only stated where the
+# table actually has no singletons: AmpliPub takes any abundance table, and an OTU table that
+# kept its singletons is absent for a different reason. `has_singletons` is NA for an
+# `ap_alpha` made before it was recorded, which falls through to the neutral sentence.
 #' @keywords internal
-ap_alpha_names_note <- function(metrics) {
+ap_alpha_names_note <- function(metrics, has_singletons = NA) {
   c(
     if (any(c("q1", "q2") %in% metrics)) {
       paste0("Shannon and inverse Simpson are the Hill numbers of order 1 and 2 (exp(H) and ",
              "1/sum(p^2)), in effective numbers of features; richness is the order-0 Hill number.")
     },
     if (!any(c("chao1", "ace") %in% metrics)) {
-      paste0("Chao1 and ACE are not reported: both estimate unseen richness from singletons, ",
-             "which denoising removes.")
+      if (isFALSE(has_singletons)) {
+        paste0("Chao1 and ACE are not reported: both estimate unseen richness from singletons, ",
+               "and this table has none, which is what denoising produces. They would equal ",
+               "observed richness.")
+      } else {
+        "Chao1 and ACE are not reported."
+      }
     }
   )
 }

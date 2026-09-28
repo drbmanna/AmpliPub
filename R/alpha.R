@@ -73,7 +73,10 @@
 #'   or looks rarefied. Default `FALSE`. See the section on Chao1 and ACE.
 #'
 #' @return An object of class `ap_alpha`: a list with `values` (a data frame of
-#'   one row per sample per metric), `depth`, `n_iter`, `seed` and `dropped`.
+#'   one row per sample per metric), `depth`, `n_iter`, `seed`, `dropped`, and
+#'   `has_singletons`, recorded from the input table before rarefaction and used
+#'   by the figure legend to decide whether denoising can be named as the reason
+#'   Chao1 and ACE are absent (`NA` for a fractional table).
 #' @export
 ap_alpha <- function(x,
                      metrics = c("q0", "q1", "q2", "evenness", "faith_pd"),
@@ -90,6 +93,14 @@ ap_alpha <- function(x,
 
   counts <- SummarizedExperiment::assay(x, "counts")
   ap_check_count_matrix(counts)
+
+  # Recorded before rarefaction, for the same reason the guard below runs here:
+  # subsampling creates singletons the data never had. The legend uses this to
+  # decide whether it may name denoising as the reason Chao1 and ACE are absent.
+  # On an OTU table that kept its singletons, that reason would be false, and
+  # AmpliPub does not know what produced the table it was given. NA where the
+  # counts are fractional, since a singleton is then not defined.
+  has_singletons <- if (all(counts == round(counts))) any(counts == 1) else NA
 
   # Before rarefaction, on purpose: the subsamples would contain singletons the
   # data never had.
@@ -156,6 +167,7 @@ ap_alpha <- function(x,
          # in with rarefy = FALSE but every sample at one depth. Recording that stops the
          # caption from calling it unrarefied (found 2026-09-18).
          common_depth = ap_common_depth(if (rarefy) depth else depths),
+         has_singletons = has_singletons,
          n_iter = n_iter,
          seed = if (rarefy) seed else NA_integer_,
          dropped = dropped,

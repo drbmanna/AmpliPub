@@ -359,7 +359,7 @@ ap_taxa_legend <- function(x, rank, group, n = 15L, type = c("bar", "heatmap"),
     },
     sprintf(paste0("Taxa shown: the %d most abundant %s-level taxa by mean relative abundance ",
                    "within each %s group, combined across groups (%d taxa)."),
-            as.integer(n), rank, group, attr(df, "n_kept")),
+            as.integer(n), rank, ap_pub_label(group, pub), attr(df, "n_kept")),
     if (is.null(pooled) || pooled == 0L) {
       "No further taxa."
     } else {

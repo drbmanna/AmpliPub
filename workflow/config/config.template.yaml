@@ -55,10 +55,14 @@ primers:
 
 quality:
   min_q: 30
-  amplicon_len: 253
+  amplicon_len: 253               # must match the region the primers above amplify
   min_overlap: 12
   margin: 20
   n: 10000
+  len_tolerance: 50               # bp amplicon_len may differ from what the primers cut
+  #                                 from references.mock, when one is configured. Catches
+  #                                 primers for one region left beside amplicon_len for
+  #                                 another; a chosen value, not a published threshold.
 
 dada2:
   allow_zero_read_samples: false
