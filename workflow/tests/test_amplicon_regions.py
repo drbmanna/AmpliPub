@@ -110,6 +110,35 @@ def test_primers_matching_nothing_are_refused_with_their_own_message():
     assert "different regions" not in msg      # not a length problem, a primer problem
 
 
+def test_a_difference_of_exactly_the_primer_length_is_refused():
+    """The real case: 341F/805R quoted as a 465 bp insert, region between them 427 bp.
+
+    17 + 21 = 38 = 465 - 427, which sits inside a 50 bp tolerance and would otherwise pass.
+    """
+    with pytest.raises(RegionError, match="combined length of the two primers"):
+        check_amplicon_len([427, 427, 428], [], 465, 50, primer_len=38)
+
+
+def test_the_primer_length_check_does_not_fire_on_ordinary_variation():
+    # Same 38 bp primers, but the difference is 10 bp, not 38.
+    summary = check_amplicon_len([427, 427, 428], [], 437, 50, primer_len=38)
+    assert summary["median"] == 427
+    assert "primer_length_mismatch" not in summary
+
+
+def test_the_primer_length_check_is_skipped_when_no_primer_length_is_given():
+    # Older callers pass no primer_len; behaviour must be unchanged for them.
+    summary = check_amplicon_len([427, 427, 428], [], 465, 50)
+    assert summary["median"] == 427
+
+
+def test_the_primer_length_check_only_fires_in_the_over_counting_direction():
+    # A configured length SHORTER than the region by the primer length is a different
+    # mistake and must not be reported as primers counted twice.
+    summary = check_amplicon_len([427, 427, 428], [], 427 - 38, 50, primer_len=38)
+    assert summary["median"] == 427
+
+
 def test_the_boundary_of_the_tolerance_is_inclusive():
     # Exactly at tolerance passes; one base beyond does not.
     assert check_amplicon_len([303], [], configured=253, tolerance=50)["median"] == 303

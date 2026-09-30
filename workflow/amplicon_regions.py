@@ -150,7 +150,7 @@ def region_lengths(records: dict[str, str], fwd: str, rev: str,
 
 
 def check_amplicon_len(lengths: list[int], missing: list[str], configured: int,
-                       tolerance: int) -> dict[str, object]:
+                       tolerance: int, primer_len: int | None = None) -> dict[str, object]:
     """Refuse a configured amplicon length the references do not support.
 
     `quality.amplicon_len` and the primer pair are two independent settings that have to
@@ -173,6 +173,21 @@ def check_amplicon_len(lengths: list[int], missing: list[str], configured: int,
     summary = {"n_found": len(lengths), "n_missing": len(missing), "median": median,
                "min": lengths[0], "max": lengths[-1], "configured": configured,
                "tolerance": tolerance}
+    # A difference of exactly the primer length is not variation between taxa, it is the
+    # primers counted twice. Published inserts are usually quoted WITH the primers (341F
+    # and 805R are given as 465 bp, while the region between them is 427), and amplicon_len
+    # here means the region WITHOUT them. Caught on PRJNA643648, where 465 - 427 = 38 was
+    # exactly len(341F) + len(805R) and sat inside a 50 bp tolerance, so the run proceeded
+    # on a length that was wrong in a specific, diagnosable way.
+    if primer_len and configured - median == primer_len:
+        summary["primer_length_mismatch"] = True
+        raise RegionError(
+            f"configured amplicon_len {configured} bp is exactly {primer_len} bp more than "
+            f"the {median} bp the primers cut from these references, and {primer_len} bp is "
+            "the combined length of the two primers. amplicon_len is the region WITHOUT the "
+            "primers, but published insert sizes usually include them. Use "
+            f"{median} bp. This is not length variation between taxa: the difference matches "
+            "the primers exactly.")
     if abs(median - configured) > tolerance:
         raise RegionError(
             f"configured amplicon_len {configured} bp, but the primers cut these references "
