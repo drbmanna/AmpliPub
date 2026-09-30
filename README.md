@@ -1,4 +1,4 @@
-# AmpliPub 0.0.2
+# AmpliPub 0.0.3
 
 [![R-CMD-check](https://github.com/drbmanna/AmpliPub/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/drbmanna/AmpliPub/actions/workflows/R-CMD-check.yaml)
 [![workflow-tests](https://github.com/drbmanna/AmpliPub/actions/workflows/workflow-tests.yaml/badge.svg)](https://github.com/drbmanna/AmpliPub/actions/workflows/workflow-tests.yaml)
@@ -6,15 +6,17 @@
 From raw amplicon reads to publication-grade statistics and figures, in one reproducible
 framework.
 
-**Status: 0.0.1, first public release.** The sequence-processing pipeline and the R
-statistics layer are both built and have been run end to end on a public 544-run dataset.
-It has been validated on one 16S V4 dataset only, and the interface may still change. What
-has and has not been checked is in [VALIDATION.md](VALIDATION.md).
+**Status: 0.0.3.** The sequence-processing pipeline and the R statistics layer are both built
+and have been run end to end on a public 544-run dataset. The workflow has since been run on a
+second dataset at two regions, V3-V4 and V4, each reproducing a known mock community. The R
+statistics layer is still validated on one 16S V4 dataset only, because the second dataset is
+ten healthy volunteers with no group contrast. The interface may still change. What has and has
+not been checked is in [VALIDATION.md](VALIDATION.md).
 
 **Scope.** The R statistics layer works on any amplicon feature table (16S rRNA, 18S, ITS or
-a functional marker gene). The raw-read workflow has so far been run and validated only on
-16S rRNA V4 data with a Greengenes2 V4 classifier; other markers need their own primers,
-truncation settings and classifier.
+a functional marker gene). The raw-read workflow has been run and validated on 16S rRNA V4 and
+V3-V4 data, with a Greengenes2 V4 classifier and with one trained here for V3-V4; other markers
+need their own primers, truncation settings and classifier.
 
 ## Motivation
 

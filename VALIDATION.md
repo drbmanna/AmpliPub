@@ -85,6 +85,43 @@ SRR2144136 are mostly sequences that match nothing in the reference file. Whethe
 samples used a different community, or were contaminated, has not been established, so they
 are reported here as observed and not counted for or against the pipeline.
 
+### A second dataset, two regions
+
+Chen et al. 2020 (PRJNA643648) sequenced the same ten subjects twice, at V3-V4 with 341F-805R
+on 2x300 and at V4 with 515F-806R, each run carrying a ZymoBIOMICS mock. That makes the V4 arm
+a comparison for the V3-V4 arm on the same subjects and the same community.
+
+| Arm | Samples | Reads into DADA2 | Mock run | Reads | ASVs | Targets recovered | Reads matching a target exactly | Reads not attributable |
+|---|---|---|---|---|---|---|---|---|
+| V3-V4, 427 bp | 29 | 4,994,246 | SRR12141642 | 60,421 | 24 | 10 of 10 | 95.47% | 4.53% |
+| V4, 253 bp | 11 | 1,240,260 | SRR12141640 | 58,853 | 21 | 9 of 9 | 98.81% | 1.19% |
+
+The target counts differ because the two primer pairs collapse the reference into different
+numbers of unique regions: 10 at V3-V4 where the targets are 427 and 428 bp, 9 at V4 where they
+are all 253 bp. Neither is a subset of the other, so the two recovery figures are not directly
+comparable to each other. Each says that its own region reproduces a known community.
+
+Taxonomic coverage on the same subjects, as the fraction of ASVs and of reads assigned:
+
+| Rank | V3-V4 (1,523 ASVs) | V4 (806 ASVs) |
+|---|---|---|
+| family | 0.983 / 0.999 | 0.906 / 0.998 |
+| genus | 0.892 / 0.989 | 0.814 / 0.973 |
+| species | 0.659 / 0.787 | 0.550 / 0.697 |
+
+**This is not a region comparison and must not be read as one.** The V3-V4 arm uses a classifier
+trained here from Greengenes2 2024.09 with `workflow/scripts/train_classifier.py`, because no
+pre-trained V3-V4 classifier ships with Greengenes2. The V4 arm uses the pre-trained Greengenes2
+V4 classifier. The two differ in training procedure as well as in region, so the difference
+above is region plus classifier and the two cannot be separated from these runs. Separating
+them needs a V4 classifier trained by the same procedure, or both arms classified against
+full-length Greengenes2. Neither has been done.
+
+Both arms were produced by one commit with no uncommitted changes, and both reproduced when
+re-run: the V4 arm returned every mock and coverage figure identical to all printed decimals,
+and the V3-V4 arm moved by three ASVs out of 1,526 with coverage unchanged in the fourth
+decimal place.
+
 ## 5. Reproducibility
 
 - **Same inputs, run twice.** The R stage run twice on identical upstream output gave all 22
@@ -111,6 +148,26 @@ Each was fixed, and each has a test that fails if it comes back.
 - **MaAsLin2 renamed features.** MaAsLin2 passes feature names through `make.names()`,
   which changed 247 of 391 ASV identifiers. Its results silently failed to match the other
   methods. Found because the method counts did not add up.
+- **3' primer readthrough.** Only 5' anchored primers were trimmed. When a read is longer
+  than its amplicon, sequencing runs past the far primer and reads it, and nothing removed
+  that. On the V4 arm above, 97.69% of R1 and 78.13% of R2 carried the far primer, so the ASVs
+  were 273 bp against a 253 bp amplicon and ended in the reverse complement of 806R, matching
+  base for base including every ambiguity code. The mock reported 0 of 9 targets recovered,
+  the ASV sequences were not amplicons, their lengths were wrong, and classification ran on
+  sequences carrying 20 bp of primer. After the fix that arm recovers 9 of 9.
+  This escaped every earlier check because validation had only ever used Baxter, where the
+  reads are 251 bp and the amplicon 253, so readthrough was impossible. The condition is
+  read length greater than amplicon length, which says in advance which datasets are affected,
+  and the three arms now measured span it: 97.69% of R1 at V4 on 2x300, 0.15% on Baxter,
+  0.11% at V3-V4 where the 427 bp amplicon cannot be crossed by a 300 bp read.
+- **Two settings for one region, with one of them hardcoded.** The mock stage did not receive
+  the configured primers and fell back to 515F-806R whatever the run used, so on V3-V4 the
+  reference was cut to 253 bp against 427 bp ASVs and every field of the summary was a
+  well-formed zero. The same defect class as `amplicon_len` disagreeing with the primer pair.
+  The stage now refuses when there are ASVs, no target is recovered, and no ASV shares a length
+  with any target, which is a region mismatch rather than a property of the library. All three
+  conditions are required, because zero recovery on its own can be a genuinely poor mock and
+  must still be reported as one.
 - **UniFrac and Shannon conventions** (section 1 and 2 above).
 - **A false "not rarefied" caption** on tables already at one depth.
 - **The screen ranked alpha and beta tests together**, although their effect sizes measure
@@ -123,8 +180,24 @@ Each was fixed, and each has a test that fails if it comes back.
 
 ## 7. Not yet validated
 
-- **One dataset.** Everything above is on one V4 dataset. Other regions (V3-V4 is next) and
-  other study designs have not been run.
+- **Two datasets, two regions, one study design.** The statistics and figures are validated
+  on Baxter alone. The workflow has now been run on a second dataset at two regions
+  (section 4), but that dataset is ten healthy volunteers with no group contrast, so its R
+  stage was deliberately not run and it tests the upstream workflow only. No other study
+  design has been run.
+- **Region against classifier.** The V3-V4 and V4 arms differ in classifier training as well
+  as in region, so no region effect is claimable from them (section 4).
+- **Readthrough trimming is not exhaustive.** `primers.readthrough_overlap` defaults to 10, so
+  at least 10 bases of the far primer must match. A read that sequenced only a few bases into
+  that primer keeps them. On the V4 arm about 80 of 806 ASVs remain in a 268 to 293 bp band
+  above the 253 bp amplicon for this reason. The trim removes the common case, not every case.
+- **The retention floor is judged against an unseeded estimate.** `quality.min_reach` is
+  checked against a quality profile that `qiime demux summarize` draws without a seed, so the
+  retained fraction shifts slightly between runs: 0.8087 and 0.8129 on two runs of the same
+  V4 data. Far from the 0.75 floor this changes nothing, and it changed nothing here. Near the
+  floor it could change whether the floor is met, and so change the truncation position and
+  everything downstream. The reported number is disclosed in `trunc_len.tsv`; the
+  non-determinism of the verdict is not yet addressed.
 - **Numeric benchmark against other tools.** AmpliPub has not yet been compared
   number for number with MicrobiomeAnalystR or nf-core/ampliseq on shared statistics.
 - **Conclusion-level benchmark.** Whether AmpliPub's defaults lead to fewer wrong
