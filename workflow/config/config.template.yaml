@@ -69,6 +69,12 @@ quality:
   min_overlap: 12
   margin: 20
   n: 10000
+  min_reach: 0.75                 # least fraction of sampled reads that must survive
+  #                                 truncation. DADA2 silently discards reads shorter than
+  #                                 the cutoff, so a run can finish on a fraction of the
+  #                                 data and look ordinary. A chosen value, not a published
+  #                                 threshold: adapted from ampliseq's trunc_rmin, which
+  #                                 picks a cutoff, whereas this checks the one min_q picked.
   len_tolerance: 50               # bp amplicon_len may differ from what the primers cut
   #                                 from references.mock, when one is configured. Catches
   #                                 primers for one region left beside amplicon_len for

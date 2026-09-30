@@ -180,6 +180,8 @@ rule quality:
     benchmark: str(BENCH / "02_quality.tsv")
     params:
         py=PY, wf=WF, outdir=Q2 / "quality", env=ENV["qiime2"], q=config["quality"],
+        # .get, like len_tolerance below: configs written before this key existed still run.
+        reach=config["quality"].get("min_reach", 0.75),
         ref=lambda wc, input: (
             f"--reference {input.reference} "
             f"--forward {config['primers']['forward']} "
@@ -190,6 +192,7 @@ rule quality:
         "{params.py} {params.wf}/02_quality.py -i {input.reads} -o {params.outdir} "
         "--min-q {params.q[min_q]} --amplicon-len {params.q[amplicon_len]} "
         "--min-overlap {params.q[min_overlap]} --margin {params.q[margin]} --n {params.q[n]} "
+        "--min-reach {params.reach} "
         "{params.ref} --env {params.env} > {log} 2>&1"
 
 

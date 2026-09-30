@@ -56,6 +56,11 @@ N_SAMPLED = 10000   # qiime demux summarize --p-n default
 LEN_TOLERANCE = 50  # bp between amplicon_len and what the primers cut from a reference.
 #                     Chosen, not published: within one region references vary by tens of
 #                     bases, between regions by hundreds, so this sits in the gap.
+MIN_REACH = 0.75    # least fraction of sampled reads that must survive truncation.
+#                     Adapted from nf-core/ampliseq's trunc_rmin default, but see
+#                     check_reach: theirs picks a cutoff, ours checks one. A chosen value.
+#                     Measured on the validated Baxter V4 run: 100.0% at both cutoffs, so
+#                     this floor does not move that result.
 
 log = logging.getLogger("quality")
 
@@ -155,8 +160,91 @@ def reach(counts: list[float], length: int) -> float:
     return 100.0 * counts[length - 1] / counts[0] if counts[0] else 0.0
 
 
+def retention_cap(counts: list[float], min_reach: float) -> int:
+    """Highest position still reached by at least `min_reach` of the sampled reads.
+
+    The quality profile runs to the longest read in the sample, not to the length most
+    reads have. Where a minority of reads is longer, every statistic past that point is
+    computed from that minority.
+    """
+    total = counts[0] if counts else 0.0
+    if not total:
+        return 0
+    ok = [i + 1 for i, c in enumerate(counts) if c / total >= min_reach]
+    return max(ok) if ok else 0
+
+
+def apply_retention_cap(name: str, chosen: int, cap: int, counts: list[float],
+                        min_reach: float) -> int:
+    """Hold truncation to a position the reads actually reach, and say so when it binds.
+
+    Found on real data (PRJNA643648 V4O, 2026-09-28): cutadapt was run keeping untrimmed
+    pairs, so most reads lost a 19 bp primer and a minority kept full length. The median
+    quality at position 281 was Q35, comfortably above the threshold, but it was the median
+    of the 1,002 reads out of 10,000 that still existed there. Truncating at 281 would have
+    silently discarded 90% of R1: no error, ordinary-looking quality, a table built from a
+    tenth of the data.
+
+    So this is not a choice between a quality guarantee and a retention one. A median over
+    10% of the reads is not a statistic about the sample, and the fix is to stop reading the
+    profile where it stops describing the data.
+    """
+    if cap and chosen > cap:
+        log.warning(
+            "%s: truncation capped at %d, down from the %d the quality rule chose. Only "
+            "%.1f%% of reads reach %d, under the required %.0f%%; %.1f%% reach %d. Past "
+            "position %d the profile describes a minority of long reads, not the sample.",
+            name, cap, chosen, reach(counts, chosen), chosen, min_reach * 100,
+            reach(counts, cap), cap, cap)
+        return cap
+    return chosen
+
+
+def check_reach(profiles: list[tuple[str, list[float], int]],
+                min_reach: float) -> dict[str, float]:
+    """Require that truncation keeps at least `min_reach` of the sampled reads.
+
+    Returns the surviving fraction per read, keyed by name.
+
+    DADA2 discards every read shorter than the truncation position, and nothing downstream
+    treats that as an error. A cutoff that keeps a third of the reads produces a run that
+    completes, a table that looks ordinary, and diversity estimates drawn from a third of
+    the data. That is the failure class worth guarding: plausible, not loud. So this is a
+    floor, not a log line.
+
+    This is the backstop, not the main mechanism: apply_retention_cap already holds the
+    cutoff to a position the reads reach. This fires when even that is not enough, for
+    instance when the sample is so short that no position retains min_reach.
+
+    The threshold matches nf-core/ampliseq's `trunc_rmin` default of 0.75, and after seeing
+    what it caught on real data their approach is right: an earlier version of this file
+    argued that capping would trade a quality guarantee for a retention one. That was wrong.
+    A median computed over 10% of the reads is not a statement about the sample, so there is
+    no guarantee being given up. The number is still ours to justify, not theirs.
+
+    `reach()` is a percentage and `min_reach` is a fraction; converting here keeps that
+    difference in one place.
+    """
+    kept = {name: reach(counts, length) / 100.0 for name, counts, length in profiles}
+    lengths = {name: length for name, _, length in profiles}
+    below = {name: frac for name, frac in kept.items() if frac < min_reach}
+    if below:
+        detail = "; ".join(
+            f"{name} keeps {frac:.1%} at position {lengths[name]}"
+            for name, frac in sorted(below.items()))
+        raise QualityError(
+            f"truncation discards too much: {detail}, below the required {min_reach:.0%}. "
+            "DADA2 drops every read shorter than the cutoff without reporting it, so the "
+            "run would finish on a fraction of the data. Either the reads are shorter than "
+            "the profile suggests, or the quality threshold is cutting too late. Lower "
+            "--min-reach only with a written reason")
+    return kept
+
+
 def write_outputs(outdir: str, fwd: dict, rev: dict, f: int, r: int, overlap: int,
-                  args) -> None:
+                  args, kept: dict[str, float] | None = None,
+                  from_quality: tuple[int, int] | None = None,
+                  caps: tuple[int, int] | None = None) -> None:
     with open(os.path.join(outdir, "quality_profile.tsv"), "w", newline="") as fh:
         w = csv.writer(fh, delimiter="\t", lineterminator="\n")
         w.writerow(["position", "median_f", "median_r", "count_f", "count_r"])
@@ -166,10 +254,23 @@ def write_outputs(outdir: str, fwd: dict, rev: dict, f: int, r: int, overlap: in
                         get(fwd, "count"), get(rev, "count")])
     with open(os.path.join(outdir, "trunc_len.tsv"), "w", newline="") as fh:
         w = csv.writer(fh, delimiter="\t", lineterminator="\n")
-        for key, value in (("trunc_len_f", f), ("trunc_len_r", r), ("min_q", args.min_q),
-                           ("amplicon_len", args.amplicon_len), ("min_overlap", args.min_overlap),
-                           ("margin", args.margin), ("expected_overlap", overlap),
-                           ("n_sampled", args.n)):
+        rows = [("trunc_len_f", f), ("trunc_len_r", r), ("min_q", args.min_q),
+                ("amplicon_len", args.amplicon_len), ("min_overlap", args.min_overlap),
+                ("margin", args.margin), ("expected_overlap", overlap),
+                ("n_sampled", args.n), ("min_reach", args.min_reach)]
+        # What the run actually retained, not only what it required. A reader checking
+        # whether a table was built from most of the data should not have to rerun anything.
+        if kept is not None:
+            rows += [("reach_f", round(kept["R1"], 6)), ("reach_r", round(kept["R2"], 6))]
+        # Both the position the quality rule proposed and the retention limit, so a reader
+        # can see whether the cap bound without rerunning anything. trunc_len_f and
+        # trunc_len_r above stay the values actually used, which is what 03_dada2.py reads.
+        if from_quality is not None:
+            rows += [("trunc_len_f_from_quality", from_quality[0]),
+                     ("trunc_len_r_from_quality", from_quality[1])]
+        if caps is not None:
+            rows += [("retention_cap_f", caps[0]), ("retention_cap_r", caps[1])]
+        for key, value in rows:
             w.writerow([key, value])
 
 
@@ -208,6 +309,9 @@ def parse_args(argv):
     p.add_argument("--len-tolerance", type=int, default=LEN_TOLERANCE,
                    help=f"bp that --amplicon-len may differ from the reference median "
                         f"(default {LEN_TOLERANCE}, a chosen value, not a published one)")
+    p.add_argument("--min-reach", type=float, default=MIN_REACH,
+                   help=f"least fraction of sampled reads that must survive truncation "
+                        f"(default {MIN_REACH}, a chosen value, not a published one)")
     p.add_argument("--n", type=int, default=N_SAMPLED,
                    help=f"reads sampled for the quality profile (default {N_SAMPLED})")
     p.add_argument("--env", default="amplipub-qiime2-2025.7", help="conda env with QIIME 2")
@@ -242,7 +346,8 @@ def check_amplicon_against_reference(args) -> dict[str, object] | None:
         lengths, missing = region_lengths(records, args.forward, args.reverse,
                                           args.max_mismatch)
         summary = check_amplicon_len(lengths, missing, args.amplicon_len,
-                                     args.len_tolerance)
+                                     args.len_tolerance,
+                                     primer_len=len(args.forward) + len(args.reverse))
     except RegionError as exc:
         raise QualityError(str(exc)) from exc
     log.info("amplicon_len %d bp agrees with the reference: median %d bp "
@@ -289,19 +394,31 @@ def run(args) -> None:
         raise QualityError(f"qiime demux summarize finished but wrote no {qzv}")
 
     fwd, rev = read_profiles(qzv)
-    f = trunc_len(fwd["50%"], args.min_q, "R1")
-    r = trunc_len(rev["50%"], args.min_q, "R2")
+    f_q = trunc_len(fwd["50%"], args.min_q, "R1")
+    r_q = trunc_len(rev["50%"], args.min_q, "R2")
     log.info("R1: %d positions, median below Q%g first at %s -> trunc-len-f %d",
-             len(fwd["50%"]), args.min_q, f + 1 if f < len(fwd["50%"]) else "none", f)
+             len(fwd["50%"]), args.min_q, f_q + 1 if f_q < len(fwd["50%"]) else "none", f_q)
     log.info("R2: %d positions, median below Q%g first at %s -> trunc-len-r %d",
-             len(rev["50%"]), args.min_q, r + 1 if r < len(rev["50%"]) else "none", r)
+             len(rev["50%"]), args.min_q, r_q + 1 if r_q < len(rev["50%"]) else "none", r_q)
+    # The quality rule can land past the point where most reads end, because the profile
+    # runs to the longest read rather than the typical one. Hold it back to where the reads
+    # actually are, before the overlap check, so the overlap is computed on real lengths.
+    f_cap = retention_cap(fwd["count"], args.min_reach)
+    r_cap = retention_cap(rev["count"], args.min_reach)
+    f = apply_retention_cap("R1", f_q, f_cap, fwd["count"], args.min_reach)
+    r = apply_retention_cap("R2", r_q, r_cap, rev["count"], args.min_reach)
     overlap = check_overlap(f, r, args.amplicon_len, args.min_overlap, args.margin)
     log.info("expected overlap %d bp (DADA2 needs %d; floor with margin %d)",
              overlap, args.min_overlap, args.min_overlap + args.margin)
     for name, rows, length in (("R1", fwd, f), ("R2", rev, r)):
         log.info("%s: %.1f%% of sampled reads reach position %d (DADA2 discards shorter reads)",
                  name, reach(rows["count"], length), length)
-    write_outputs(outdir, fwd, rev, f, r, overlap, args)
+    # Enforced, not just reported: see check_reach. Both reads are measured before either
+    # can fail, so the log shows the whole picture rather than stopping at the first one.
+    kept = check_reach([("R1", fwd["count"], f), ("R2", rev["count"], r)], args.min_reach)
+    log.info("retention floor %.0f%% met: R1 %.1f%%, R2 %.1f%%",
+             args.min_reach * 100, kept["R1"] * 100, kept["R2"] * 100)
+    write_outputs(outdir, fwd, rev, f, r, overlap, args, kept, (f_q, r_q), (f_cap, r_cap))
     log.info("done: --p-trunc-len-f %d --p-trunc-len-r %d  (%s)", f, r,
              os.path.join(outdir, "trunc_len.tsv"))
 
