@@ -109,13 +109,34 @@ Taxonomic coverage on the same subjects, as the fraction of ASVs and of reads as
 | genus | 0.892 / 0.989 | 0.814 / 0.973 |
 | species | 0.659 / 0.787 | 0.550 / 0.697 |
 
-**This is not a region comparison and must not be read as one.** The V3-V4 arm uses a classifier
-trained here from Greengenes2 2024.09 with `workflow/scripts/train_classifier.py`, because no
-pre-trained V3-V4 classifier ships with Greengenes2. The V4 arm uses the pre-trained Greengenes2
-V4 classifier. The two differ in training procedure as well as in region, so the difference
-above is region plus classifier and the two cannot be separated from these runs. Separating
-them needs a V4 classifier trained by the same procedure, or both arms classified against
-full-length Greengenes2. Neither has been done.
+**The table above is not a region comparison.** The V3-V4 arm uses a classifier trained here
+from Greengenes2 2024.09 with `workflow/scripts/train_classifier.py`, because no V3-V4
+classifier ships with Greengenes2. The V4 arm uses Greengenes2's own V4 classifier. The two
+differ in training procedure as well as in region, so those numbers are region plus classifier.
+
+To separate them, both arms were classified again with one classifier, full-length Greengenes2
+2024.09, at the same confidence of 0.7. One reference, one training procedure, region the only
+difference. The criterion was fixed before the run: no region effect would be claimed if the
+ASV-weighted and read-weighted coverage disagreed in direction.
+
+| Rank | V3-V4 | V4 | Difference |
+|---|---|---|---|
+| family, by ASV | 0.973 | 0.908 | +6.49 pp |
+| family, by read | 0.965 | 0.974 | -0.83 pp |
+| genus, by ASV | 0.855 | 0.790 | +6.46 pp |
+| genus, by read | 0.933 | 0.940 | -0.71 pp |
+| species, by ASV | 0.619 | 0.527 | +9.19 pp |
+| species, by read | 0.759 | 0.657 | +10.16 pp |
+
+At family and genus the two weightings point in opposite directions, so by the stated criterion
+no region effect is claimed at those ranks. At species both agree and V3-V4 is ahead by 9 to 10
+percentage points. **What this dataset supports is a species-level difference, nothing more.**
+The larger genus gap in the first table, 0.892 against 0.814, does not survive holding the
+classifier constant, so most of it was the classifier and not the region.
+
+Read-weighted coverage is already between 0.93 and 0.97 at genus for both regions, so abundant
+taxa are named from either one and the ASV-weighted gap sits in the rare tail. That is an
+explanation offered for the pattern, not something measured here.
 
 Both arms were produced by one commit with no uncommitted changes, and both reproduced when
 re-run: the V4 arm returned every mock and coverage figure identical to all printed decimals,
@@ -185,8 +206,17 @@ Each was fixed, and each has a test that fails if it comes back.
   (section 4), but that dataset is ten healthy volunteers with no group contrast, so its R
   stage was deliberately not run and it tests the upstream workflow only. No other study
   design has been run.
-- **Region against classifier.** The V3-V4 and V4 arms differ in classifier training as well
-  as in region, so no region effect is claimable from them (section 4).
+- **Region effect above species level.** With one classifier on both arms, V3-V4 and V4 differ
+  at species by 9 to 10 percentage points, but at family and genus the ASV-weighted and
+  read-weighted figures disagree in direction, so no claim is made at those ranks (section 4).
+- **Why region-matched classifiers beat full-length is not established.** That they do is
+  measured, on three arms and against a pre-registered rule. The reason is not. The obvious
+  explanation, that a full-length model classifying a short fragment has flatter posteriors and
+  so fails the confidence threshold more often, predicts a smaller penalty on a longer amplicon
+  and the opposite was found: the genus penalty is 3.68 pp by ASV on the 427 bp V3-V4 amplicon
+  against 2.36 pp on the 253 bp V4 amplicon of the same subjects. The penalty also varies by
+  dataset at fixed amplicon length, 9.40 pp on Baxter against 2.36 pp here, both at 253 bp.
+  AmpliPub therefore keeps region-matched classifiers on the evidence and offers no mechanism.
 - **Readthrough trimming is not exhaustive.** `primers.readthrough_overlap` defaults to 10, so
   at least 10 bases of the far primer must match. A read that sequenced only a few bases into
   that primer keeps them. On the V4 arm about 80 of 806 ASVs remain in a 268 to 293 bp band

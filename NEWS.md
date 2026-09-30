@@ -48,9 +48,19 @@
 ## Validation
 
 * `VALIDATION.md` adds a second dataset at two regions, the readthrough defect and what it
-  cost, and four limitations: one study design only, the region effect not separable from the
-  classifier effect, readthrough trimming not being exhaustive, and the retention floor being
-  judged against an unseeded estimate.
+  cost, and four limitations: one study design only, readthrough trimming not being exhaustive,
+  the retention floor being judged against an unseeded estimate, and no established reason why
+  region-matched classifiers beat full-length ones.
+* Both arms of that dataset were also classified with one classifier, full-length Greengenes2
+  2024.09, so region is the only difference between them. Against a criterion fixed before the
+  run, V3-V4 is ahead of V4 at species by 9 to 10 percentage points, and at family and genus the
+  ASV-weighted and read-weighted figures disagree in direction so no claim is made there. The
+  larger genus gap seen with each arm's own classifier does not survive holding the classifier
+  constant, so most of it was the classifier rather than the region.
+* Region-matched classifiers stay the default, now on three arms rather than one. The reason they
+  win is explicitly not established: the flatter-posteriors explanation predicts a smaller
+  penalty on a longer amplicon, and the 427 bp V3-V4 amplicon takes a larger one than the 253 bp
+  V4 amplicon of the same subjects.
 
 # AmpliPub 0.0.2
 
