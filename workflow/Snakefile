@@ -230,9 +230,15 @@ if MOCK:
         benchmark: str(BENCH / "04_mock.tsv")
         params:
             py=PY, wf=WF, outdir=Q2 / "mock", env=ENV["qiime2"], samples=",".join(MOCK),
+            # The configured primers, NOT 04_mock.py's V4 defaults. Without these the
+            # reference is cut to 515F/806R whatever region the run used, so on V3-V4 every
+            # target is 253 bp against ~427 bp ASVs and nothing matches: the stage reported
+            # "0 of 9 targets recovered" instead of saying the region was wrong.
+            fwd=config["primers"]["forward"], rev=config["primers"]["reverse"],
         shell:
             "{params.py} {params.wf}/04_mock.py -b {input.table} -r {input.rep_seqs} "
             "-m {input.reference} -s {params.samples} -o {params.outdir} "
+            "--primer-f {params.fwd} --primer-r {params.rev} "
             "--env {params.env} > {log} 2>&1"
 
 

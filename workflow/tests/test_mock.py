@@ -345,6 +345,34 @@ def test_low_depth_note_fires_when_asked(tmp_path, monkeypatch):
     assert "below the 200 you asked" in (tmp_path / "out" / "mock_log.txt").read_text()
 
 
+def test_a_region_mismatch_is_refused_not_reported_as_zeroes(tmp_path, monkeypatch):
+    """The real failure: targets cut for another region, so nothing can ever match.
+
+    Found on a V3-V4 run whose targets came out at 253 bp because the Snakefile never
+    passed the configured primers and 04_mock.py defaults to 515F/806R. Every field in the
+    summary was a well-formed zero: 0 of 9 recovered, all ASVs unattributable.
+    """
+    off_region = {"f1": "ACGT" * 25, "f2": "ACGT" * 25 + "A"}   # 100 and 101 bp
+    assert run_main(monkeypatch, tmp_path, FakeRunner(seqs=off_region)) == 1
+    log = (tmp_path / "out" / "mock_log.txt").read_text()
+    assert "region mismatch" in log
+    assert "primers the reads were trimmed with" in log
+
+
+def test_a_genuinely_poor_mock_is_still_reported_not_refused(tmp_path, monkeypatch):
+    """Zero recovery alone must not trigger it: only zero recovery AND no shared length.
+
+    Same length as a target, so the comparison is meaningful and the run should report a
+    bad result rather than refuse to describe it.
+    """
+    same_length = {"f1": "A" * len(V4_A), "f2": "C" * len(V4_A)}
+    assert run_main(monkeypatch, tmp_path, FakeRunner(seqs=same_length)) == 0
+    rows = {r["sample-id"]: r for r in csv.DictReader(
+        (tmp_path / "out" / "mock_summary.tsv").open(), delimiter="\t")}
+    assert rows["mock1"]["targets_recovered"] == "0"
+    assert "region mismatch" not in (tmp_path / "out" / "mock_log.txt").read_text()
+
+
 def test_unknown_mock_sample_fires(tmp_path, monkeypatch):
     assert run_main(monkeypatch, tmp_path, FakeRunner(), samples="mock9") == 1
     assert "not in the table" in (tmp_path / "out" / "mock_log.txt").read_text()

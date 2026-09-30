@@ -461,6 +461,19 @@ def run(args) -> None:
             log.info("    %d ASV(s) have no reference of the same length (an indel), "
                      "counted as not attributable",
                      r["asvs_without_same_length_reference"])
+        # Zero exact hits AND not one ASV sharing a length with any target is not a result
+        # about the library, it is the reference cut for a different region. Found on a V3-V4
+        # run whose targets came out at 253 bp because the primers defaulted to 515F/806R:
+        # every number in the summary was a well-formed zero. Refuse instead of reporting it.
+        if (r["asvs"] and not r["targets_recovered"]
+                and r["asvs_without_same_length_reference"] == r["asvs"]):
+            raise MockError(
+                f"{sample}: none of the {r['targets_total']} targets was recovered and not "
+                f"one of the {r['asvs']} ASVs shares a length with any target. That is a "
+                "region mismatch, not a property of this library: the reference was cut with "
+                f"primers ({args.primer_f} / {args.primer_r}) that do not describe the "
+                "region these reads came from. Check that --primer-f and --primer-r are the "
+                "primers the reads were trimmed with.")
         if args.low_depth_note and r["reads"] < args.low_depth_note:
             log.warning("  %s has %d reads, below the %d you asked to be told about. "
                         "Read these numbers as a description of this library, not as "
