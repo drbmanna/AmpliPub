@@ -52,9 +52,13 @@ ENA_FIELDS = [
     "run_accession", "sample_accession", "sample_title", "study_accession",
     "secondary_study_accession", "experiment_accession", "instrument_platform",
     "instrument_model", "library_layout", "library_strategy", "library_source",
+    "library_name",
     "read_count", "base_count", "fastq_ftp", "fastq_md5", "fastq_bytes",
     "first_public",
 ]
+# What the run genuinely cannot proceed without. `library_name` is deliberately absent:
+# it is optional in ENA and whole studies omit it, so a missing column must not be fatal.
+ENA_REQUIRED_FIELDS = [f for f in ENA_FIELDS if f != "library_name"]
 # One accession per query. ENA answers a comma-separated list, or an unknown
 # ID, with HTTP 200 and an empty table, so both have to be caught here.
 ACCESSION_RE = re.compile(r"^(PRJ(EB|NA|DB)\d+|[SED]R[APSXR]\d+|SAM(N|EA|D)\d+)$")
@@ -161,9 +165,16 @@ def parse_runs(text: str, accession: str) -> list[dict]:
             "private accessions with an empty table, not an error, so check the "
             "ID and whether the data are public yet."
         )
-    missing = [f for f in ENA_FIELDS if f not in rows[0]]
+    missing = [f for f in ENA_REQUIRED_FIELDS if f not in rows[0]]
     if missing:
         raise FetchError(f"ENA response lacks expected columns: {', '.join(missing)}")
+    # Optional fields are requested but not insisted on: ENA omits a column entirely when
+    # no run in the study carries it, so requiring one would make a study fail for lacking
+    # metadata it was never obliged to supply. Fill them so later code can read them
+    # without knowing which were returned.
+    for row in rows:
+        for field in ENA_FIELDS:
+            row.setdefault(field, "")
     dups = [r for r, n in Counter(r["run_accession"] for r in rows).items() if n > 1]
     if dups:
         raise FetchError(f"ENA listed runs more than once: {', '.join(dups[:10])}")
@@ -526,11 +537,22 @@ def write_manifest(path: str, plan: dict[str, list[ReadFile]], layout: str, fast
 
 
 def write_run_map(path: str, rows: list[dict]) -> None:
+    """Map every run to the columns a later stage might pool it by.
+
+    `library_name` is here because a BioSample is not always one library. Submissions that
+    register one BioSample per study, not per library, leave `sample_accession` and
+    `sample_title` identical across every run, and pooling on either silently merges
+    unrelated samples into one. `library_name` is then the only per-library identifier.
+    It is optional in ENA, so it can be empty. That case is already refused downstream:
+    read_run_map in 07_collapse.py stops on a run with no value in the pooling column.
+    """
     with open(path, "w", newline="") as fh:
         w = csv.writer(fh, delimiter="\t", lineterminator="\n")
-        w.writerow(["sample-id", "sample_accession", "sample_title", "instrument_model", "read_count"])
+        w.writerow(["sample-id", "sample_accession", "sample_title", "library_name",
+                    "instrument_model", "read_count"])
         for r in rows:
             w.writerow([r["run_accession"], r["sample_accession"], _clean(r["sample_title"]),
+                        _clean(r.get("library_name", "")),
                         r["instrument_model"], r["read_count"]])
 
 

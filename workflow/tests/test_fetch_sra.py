@@ -89,6 +89,48 @@ def test_duplicate_runs_fatal():
         fs.parse_runs(text + line + "\n", "X")
 
 
+def test_an_optional_column_may_be_absent():
+    """ENA drops a column entirely when no run in the study carries it.
+
+    The recorded Baxter response has no library_name, and a study must not fail for
+    lacking metadata it was never obliged to supply.
+    """
+    assert "library_name" not in (FIX / "ena_baxter_subset.tsv").read_text().splitlines()[0]
+    rows = rows_from("ena_baxter_subset.tsv")
+    assert rows and all(r["library_name"] == "" for r in rows)
+
+
+def test_a_required_column_is_still_fatal():
+    full = (FIX / "ena_baxter_subset.tsv").read_text().splitlines()
+    header = full[0].split("\t")
+    drop = header.index("sample_accession")
+    text = "\n".join("\t".join(v for i, v in enumerate(line.split("\t")) if i != drop)
+                     for line in full) + "\n"
+    with pytest.raises(fs.FetchError, match="sample_accession"):
+        fs.parse_runs(text, "X")
+
+
+def test_run_map_carries_library_name_for_pooling(tmp_path):
+    """A BioSample is not always one library, so the run map has to expose library_name.
+
+    PRJNA643648 registers 4 BioSamples for 52 runs: pooling on sample_accession there
+    would merge 29 separate libraries into a single sample without complaint.
+    """
+    rows = [dict.fromkeys(fs.ENA_FIELDS, ""), dict.fromkeys(fs.ENA_FIELDS, "")]
+    rows[0].update(run_accession="SRR1", sample_accession="SAMN1", sample_title="one study",
+                   library_name="V3V4-EP01-C1", instrument_model="Illumina MiSeq",
+                   read_count="10")
+    rows[1].update(run_accession="SRR2", sample_accession="SAMN1", sample_title="one study",
+                   library_name="V3V4-EP01-C2", instrument_model="Illumina MiSeq",
+                   read_count="20")
+    out = tmp_path / "run_to_sample.tsv"
+    fs.write_run_map(str(out), rows)
+    table = list(csv.DictReader(open(out), delimiter="\t"))
+    assert [r["library_name"] for r in table] == ["V3V4-EP01-C1", "V3V4-EP01-C2"]
+    # The point: the two runs are indistinguishable by every other column.
+    assert len({r["sample_accession"] for r in table}) == 1
+
+
 def test_unknown_run_in_subset_fatal():
     with pytest.raises(fs.FetchError, match="not part of this accession"):
         fs.select_runs(rows_from("ena_baxter_subset.tsv"), ["SRR2143519", "SRR9999999"])
