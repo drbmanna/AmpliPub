@@ -52,6 +52,16 @@ primers:
   forward: GTGCCAGCMGCCGCGGTAA      # 515F
   reverse: GGACTACHVGGGTWTCTAAT     # 806R
   discard_untrimmed: false
+  trim_readthrough: true            # remove the far primer from the 3' end. Needed whenever
+  #                                   a read is longer than the amplicon: sequencing runs on
+  #                                   past the far primer and reads it, the 5' pass cannot
+  #                                   see it because it is anchored, and every ASV then ends
+  #                                   with that primer. Turn off only for reads known to be
+  #                                   shorter than the amplicon.
+  readthrough_overlap: 10           # bases of the far primer that must match at the 3' end.
+  #                                   Cutadapt's own default is 3, which matches by chance in
+  #                                   about 1 read in 64 and would shorten ASVs. A chosen
+  #                                   value, not a published threshold.
 
 quality:
   min_q: 30

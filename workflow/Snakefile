@@ -157,6 +157,11 @@ rule primers:
             f"--primer-f {config['primers']['forward']}",
             f"--primer-r {config['primers']['reverse']}",
             switch("--discard-untrimmed", config["primers"]["discard_untrimmed"]),
+            # .get, so configs written before these keys existed still run, and the safe
+            # behaviour (trimming the readthrough) is what they get.
+            switch("--no-trim-readthrough",
+                   not config["primers"].get("trim_readthrough", True)),
+            f"--readthrough-overlap {config['primers'].get('readthrough_overlap', 10)}",
         ])),
     shell:
         "{params.py} {params.wf}/01_primers.py -i {input} -o {params.outdir} {params.args} "

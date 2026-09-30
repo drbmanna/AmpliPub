@@ -87,6 +87,8 @@ properties:
       forward: {type: string, default: "GTGCCAGCMGCCGCGGTAA"}
       reverse: {type: string, default: "GGACTACHVGGGTWTCTAAT"}
       discard_untrimmed: {type: boolean, default: false}
+      trim_readthrough: {type: boolean, default: true}
+      readthrough_overlap: {type: integer, default: 10, minimum: 4}
     required: [forward, reverse, discard_untrimmed]
 
   quality:

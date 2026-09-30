@@ -78,6 +78,12 @@ class FakeRunner:
         if self.write_output:
             make_qza(cmd[cmd.index("--o-trimmed-sequences") + 1], self.out_samples)
         reports = self.reports
+        # A list gives one report per cutadapt pass, so the 5' and 3' passes can be told
+        # apart. Needed because they apply different rules to read loss.
+        if isinstance(reports, list):
+            self.pass_no = getattr(self, "pass_no", 0)
+            reports = reports[min(self.pass_no, len(reports) - 1)]
+            self.pass_no += 1
         if reports is None:
             reports = "".join(block(s, i, 1000) for i, s in enumerate(self.samples))
         return self.rc, reports, "Running external command line application(s).\n"
@@ -224,7 +230,9 @@ def test_output_with_different_samples_is_fatal(monkeypatch, tmp_path, caplog):
 def test_nothing_trimmed_skips_trimmed_qc(monkeypatch, tmp_path, caplog):
     runner = FakeRunner(["S1", "S2"])
     assert run_main(monkeypatch, tmp_path, runner, ["S1", "S2"]) == 0
-    assert len(runner.calls) == 1
+    # Two cutadapt passes, 5' then 3' readthrough, and no QC because nothing was trimmed.
+    assert [c for c in runner.calls if "trim-paired" in c] == runner.calls
+    assert len(runner.calls) == 2
     assert "Trimmed-read QC skipped" in caplog.text
 
 
@@ -232,12 +240,93 @@ def test_trimmed_reads_get_qc(monkeypatch, tmp_path, caplog):
     reports = block("S1", 0, 1000, r1=980, r2=975)
     runner = FakeRunner(["S1"], reports=reports)
     assert run_main(monkeypatch, tmp_path, runner, ["S1"]) == 0
-    export, qc_call = runner.calls[1], runner.calls[2]
+    # Found by content, not by position: the 3' readthrough pass sits between the trimming
+    # and the export, and indexing by number broke when it was added.
+    export = next(c for c in runner.calls if "export" in c)
+    qc_call = next(c for c in runner.calls if pr.QC_SCRIPT in c)
     assert export[4:7] == ["qiime", "tools", "export"]
     out = tmp_path / "out"
     assert qc_call[qc_call.index("-i") + 1] == str(out / "trimmed_fastq")
     assert qc_call[qc_call.index("-o") + 1] == str(out / "qc_trimmed")
     assert "1955 reads trimmed" in caplog.text
+
+
+# The 3' readthrough pass
+
+def readthrough_call(runner):
+    return next(c for c in runner.calls if "--p-adapter-f" in c)
+
+
+def test_readthrough_cuts_the_opposite_primer_reverse_complemented(monkeypatch, tmp_path):
+    """R1 must be cleared of the REVERSE primer's complement, and R2 of the forward's.
+
+    This is the bug that put 20 bases of 806R on the end of every V4O ASV.
+    """
+    runner = FakeRunner(["S1"], reports=block("S1", 0, 1000, r1=980, r2=975))
+    assert run_main(monkeypatch, tmp_path, runner, ["S1"]) == 0
+    call = readthrough_call(runner)
+    assert call[call.index("--p-adapter-f") + 1] == pr.revcomp(pr.PRIMER_R)
+    assert call[call.index("--p-adapter-r") + 1] == pr.revcomp(pr.PRIMER_F)
+    # Never anchored, and it must not discard: most reads have no readthrough at all.
+    assert "^" not in call[call.index("--p-adapter-f") + 1]
+    assert "--p-no-discard-untrimmed" in call
+
+
+def test_readthrough_requires_more_than_cutadapts_default_overlap(monkeypatch, tmp_path):
+    """3 bases match by chance in about 1 read in 64, which would shorten ASVs."""
+    runner = FakeRunner(["S1"], reports=block("S1", 0, 1000, r1=980, r2=975))
+    assert run_main(monkeypatch, tmp_path, runner, ["S1"]) == 0
+    call = readthrough_call(runner)
+    assert int(call[call.index("--p-overlap") + 1]) == pr.READTHROUGH_OVERLAP
+    assert pr.READTHROUGH_OVERLAP > 3
+
+
+def test_readthrough_overlap_is_configurable(monkeypatch, tmp_path):
+    runner = FakeRunner(["S1"], reports=block("S1", 0, 1000, r1=980, r2=975))
+    assert run_main(monkeypatch, tmp_path, runner, ["S1"],
+                    ["--readthrough-overlap", "14"]) == 0
+    call = readthrough_call(runner)
+    assert call[call.index("--p-overlap") + 1] == "14"
+
+
+def test_the_stage_output_is_trimmed_qza_either_way(monkeypatch, tmp_path):
+    """Later stages read trimmed.qza, so that name must be the final artifact."""
+    runner = FakeRunner(["S1"], reports=block("S1", 0, 1000, r1=980, r2=975))
+    assert run_main(monkeypatch, tmp_path, runner, ["S1"]) == 0
+    assert (tmp_path / "out" / "trimmed.qza").exists()
+    assert (tmp_path / "out" / "trimmed_5prime.qza").exists()   # the intermediate is kept
+    call = readthrough_call(runner)
+    assert call[call.index("--o-trimmed-sequences") + 1] == str(tmp_path / "out" / "trimmed.qza")
+
+
+def test_readthrough_can_be_turned_off_and_says_so(monkeypatch, tmp_path, caplog):
+    runner = FakeRunner(["S1"], reports=block("S1", 0, 1000, r1=980, r2=975))
+    assert run_main(monkeypatch, tmp_path, runner, ["S1"], ["--no-trim-readthrough"]) == 0
+    assert not any("--p-adapter-f" in c for c in runner.calls)
+    assert (tmp_path / "out" / "trimmed.qza").exists()
+    assert not (tmp_path / "out" / "trimmed_5prime.qza").exists()
+    assert "readthrough trimming is off" in caplog.text
+
+
+def test_readthrough_reports_no_readthrough_as_a_result_not_a_failure(monkeypatch, tmp_path,
+                                                                     caplog):
+    """Zero is correct whenever the amplicon is longer than the reads."""
+    runner = FakeRunner(["S1"], reports=block("S1", 0, 1000, r1=0, r2=0))
+    assert run_main(monkeypatch, tmp_path, runner, ["S1"]) == 0
+    assert "no readthrough found" in caplog.text
+
+
+def test_readthrough_may_lose_a_pair_and_reports_it(monkeypatch, tmp_path, caplog):
+    """A read that is all far primer trims to nothing, so loss here is legitimate.
+
+    The 5' pass refuses any loss when untrimmed reads are kept; this pass must not.
+    """
+    runner = FakeRunner(["S1"], reports=[
+        block("S1", 0, 1000, r1=980, r2=975),                  # 5' pass: nothing lost
+        block("S1", 0, 1000, r1=12, r2=9, pairs_out=998),      # 3' pass: two pairs gone
+    ])
+    assert run_main(monkeypatch, tmp_path, runner, ["S1"]) == 0
+    assert "2 pair(s) dropped by this pass" in caplog.text
 
 
 def test_trimmed_qc_failure_is_fatal(monkeypatch, tmp_path, caplog):

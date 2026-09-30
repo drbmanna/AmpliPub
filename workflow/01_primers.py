@@ -44,8 +44,15 @@ from datetime import datetime, timezone
 
 __version__ = "0.1.0"
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from amplicon_regions import revcomp  # noqa: E402
+
 PRIMER_F = "GTGCCAGCMGCCGCGGTAA"   # 515F, V4
 PRIMER_R = "GGACTACHVGGGTWTCTAAT"  # 806R, V4
+# Bases of the far primer that must match at a read's 3' end before it is cut. Cutadapt's
+# own default is 3, where a chance match costs about 1 read in 64; a real readthrough shows
+# the whole primer. A chosen value, not a published threshold.
+READTHROUGH_OVERLAP = 10
 PRIMER_RE = re.compile(r"^[ACGTRYSWKMBDHVN]{10,}$")
 # QIIME 2 prints its own "Command: ..." lines into the same output, so a report can start
 # mid-line ("Command: This is cutadapt 5.1 ..."). Split on the marker wherever it is.
@@ -133,6 +140,47 @@ def cutadapt_cmd(qza: str, out_qza: str, env: str, primer_f: str, primer_r: str,
             "--i-demultiplexed-sequences", qza,
             "--p-front-f", "^" + primer_f, "--p-front-r", "^" + primer_r,
             "--p-discard-untrimmed" if discard else "--p-no-discard-untrimmed",
+            "--p-cores", str(cores), "--o-trimmed-sequences", out_qza, "--verbose"]
+
+
+def readthrough_cmd(qza: str, out_qza: str, env: str, primer_f: str, primer_r: str,
+                    overlap: int, cores: int) -> list[str]:
+    """Remove the far primer from the 3' end, for reads longer than the amplicon.
+
+    When the read is longer than the amplicon, sequencing carries on past the far primer and
+    reads it too. The 5' pass cannot see that: it is anchored at position 1. The far primer
+    then stays in the read, and after merging every ASV is the amplicon plus that primer.
+
+    Found on PRJNA643648 V4O, where the ASVs came out at 273 bp against 253 bp references:
+    253 + 20, and 806R is 20 bases. The ASVs ended ATTAGAAACCCTAGTAGTCC, which is
+    revcomp(GGACTACHVGGGTWTCTAAT) base for base, ambiguity codes included. Nothing failed.
+    The mock check simply found no reference of the same length as any ASV.
+
+    Why this was invisible until now: the only validated dataset, Baxter, has 251 bp reads
+    and a 253 bp amplicon, so the reads cannot reach the far primer. Readthrough needs
+    read length > amplicon length, which is ordinary for V4 on 2x300.
+
+    A second pass, not extra flags on the first, for two reasons. The first pass's report is
+    what `check_counts` and `interpret` read, and cutadapt counts a read as having "an
+    adapter" whether it matched the primer or the readthrough, so combining them would
+    quietly change what "primers present" means. And `--p-discard-untrimmed` on the first
+    pass is about the primer; most reads legitimately have no readthrough at all, so this
+    pass never discards.
+
+    nf-core/ampliseq has the same step but runs it only under `--illumina_pe_its`
+    (cutadapt_workflow.nf), so their 16S runs carry the same issue. This is a deliberate
+    divergence, on evidence rather than on their example.
+
+    `overlap` is raised well above cutadapt's default of 3, because a 3-base match to the
+    start of the adapter at a read's 3' end happens by chance in roughly 1 read in 64 and
+    would silently shorten ASVs. A real readthrough presents the whole primer, so requiring
+    a longer match costs nothing and makes a chance match negligible. A chosen value.
+    """
+    return ["conda", "run", "-n", env, "qiime", "cutadapt", "trim-paired",
+            "--i-demultiplexed-sequences", qza,
+            "--p-adapter-f", revcomp(primer_r), "--p-adapter-r", revcomp(primer_f),
+            "--p-overlap", str(overlap),
+            "--p-no-discard-untrimmed",
             "--p-cores", str(cores), "--o-trimmed-sequences", out_qza, "--verbose"]
 
 
@@ -256,6 +304,14 @@ def parse_args(argv):
     p.add_argument("-o", "--outdir", required=True, help="output directory")
     p.add_argument("--primer-f", default=PRIMER_F, help=f"forward primer (default 515F {PRIMER_F})")
     p.add_argument("--primer-r", default=PRIMER_R, help=f"reverse primer (default 806R {PRIMER_R})")
+    p.add_argument("--no-trim-readthrough", dest="trim_readthrough", action="store_false",
+                   help="skip the 3' pass that removes the far primer from reads longer "
+                        "than the amplicon. Off is unsafe unless the reads are known to be "
+                        "shorter than the amplicon")
+    p.add_argument("--readthrough-overlap", type=int, default=READTHROUGH_OVERLAP,
+                   help=f"bases of the far primer that must match at a read's 3' end "
+                        f"(default {READTHROUGH_OVERLAP}; cutadapt's own default of 3 "
+                        "matches by chance in about 1 read in 64). A chosen value")
     p.add_argument("--discard-untrimmed", action="store_true",
                    help="drop pairs where a primer was not found (only for reads that carry primers)")
     p.add_argument("--cores", type=int, default=4, help="CPU cores for cutadapt (default 4)")
@@ -266,6 +322,54 @@ def parse_args(argv):
                    help="seconds before cutadapt is killed (default 7200)")
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return p.parse_args(argv)
+
+
+def trim_readthrough(in_qza: str, out_qza: str, primer_f: str, primer_r: str,
+                     r1_to_sample: dict, args, outdir: str) -> str:
+    """Run the 3' pass and report how much it cut. Returns the artifact to carry forward.
+
+    Reports the count rather than asserting anything about it. Zero is the right answer
+    whenever the amplicon is longer than the reads, which is most 16S runs, so a count of
+    zero is information and not a failure.
+    """
+    log.info("3' readthrough pass: adapter-f %s, adapter-r %s, at least %d matching bases",
+             revcomp(primer_r), revcomp(primer_f), args.readthrough_overlap)
+    cmd = readthrough_cmd(in_qza, out_qza, args.env, primer_f, primer_r,
+                          args.readthrough_overlap, args.cores)
+    rc, out, err = run_cmd(cmd, args.timeout)
+    with open(os.path.join(outdir, "cutadapt_readthrough_report.log"), "w") as fh:
+        fh.write(out)
+        fh.write("\n# ---- stderr ----\n")
+        fh.write(err)
+    if rc != 0:
+        raise PrimerError(f"qiime cutadapt (3' readthrough) exited with code {rc}:\n"
+                          f"{_tail(err)}")
+    if not os.path.isfile(out_qza) or os.path.getsize(out_qza) == 0:
+        raise PrimerError(f"the 3' readthrough pass wrote no {out_qza}")
+    rows, _ = parse_reports(out + "\n" + err, r1_to_sample)
+    # discard=True, meaning loss is allowed here. It still refuses more pairs out than in.
+    # This pass can legitimately lose a pair: a read that is entirely the far primer trims
+    # to nothing. So the loss is reported below rather than treated as a failure, unlike the
+    # 5' pass where keeping untrimmed reads means the count must not move.
+    check_counts(rows, discard=True)
+    check_output(out_qza, set(r1_to_sample.values()))
+    write_summary(os.path.join(outdir, "readthrough_summary.tsv"), rows)
+    pairs_in = sum(r["pairs_in"] for r in rows)
+    lost = pairs_in - sum(r["pairs_out"] for r in rows)
+    if lost:
+        log.info("%d pair(s) dropped by this pass (%.4f%%), which happens when a read is "
+                 "all far primer and trims to nothing", lost, pct(lost, pairs_in))
+    r1 = sum(r["r1_with_primer"] for r in rows)
+    r2 = sum(r["r2_with_primer"] for r in rows)
+    log.info("3' readthrough removed from R1 %d reads (%.2f%%), R2 %d reads (%.2f%%) of %d",
+             r1, pct(r1, pairs_in), r2, pct(r2, pairs_in), pairs_in)
+    if r1 == 0 and r2 == 0:
+        log.info("no readthrough found, so no read reached the far primer: the reads are "
+                 "shorter than the amplicon. Nothing was changed by this pass")
+    else:
+        log.info("reads reached past the amplicon and carried the far primer. Without this "
+                 "pass those bases would have stayed in every ASV")
+    return out_qza
 
 
 def run(args) -> None:
@@ -283,7 +387,12 @@ def run(args) -> None:
     log.info("primers: forward ^%s, reverse ^%s; untrimmed pairs %s", primer_f, primer_r,
              "discarded" if args.discard_untrimmed else "kept")
 
-    out_qza = os.path.join(outdir, "trimmed.qza")
+    # trimmed.qza stays the stage's output whatever runs inside, because every later stage
+    # reads that name. With the 3' pass on, the 5' pass writes an intermediate and the 3'
+    # pass produces trimmed.qza; both are kept so either step can be inspected.
+    final_qza = os.path.join(outdir, "trimmed.qza")
+    out_qza = (os.path.join(outdir, "trimmed_5prime.qza") if args.trim_readthrough
+               else final_qza)
     cmd = cutadapt_cmd(qza, out_qza, args.env, primer_f, primer_r, args.discard_untrimmed,
                        args.cores)
     rc, out, err = run_cmd(cmd, args.timeout)
@@ -299,6 +408,13 @@ def run(args) -> None:
     rows, version = parse_reports(out + "\n" + err, r1_to_sample)
     check_counts(rows, args.discard_untrimmed)
     check_output(out_qza, set(r1_to_sample.values()))
+    if args.trim_readthrough:
+        out_qza = trim_readthrough(out_qza, final_qza, primer_f, primer_r, r1_to_sample,
+                                   args, outdir)
+    else:
+        log.warning("3' readthrough trimming is off. If any read is longer than the "
+                    "amplicon, the far primer stays in it and every ASV will be the "
+                    "amplicon plus that primer")
     write_summary(os.path.join(outdir, "primer_summary.tsv"), rows)
     pairs_in = sum(r["pairs_in"] for r in rows)
     log.info("cutadapt %s: %d samples, %d pairs in, %d out; R1 with primer %d (%.2f%%), "
