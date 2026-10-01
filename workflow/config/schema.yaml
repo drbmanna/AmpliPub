@@ -107,6 +107,14 @@ properties:
     type: object
     properties:
       allow_zero_read_samples: {type: boolean, default: false}
+      asv_len_tolerance:
+        type: integer
+        minimum: 0
+        default: 50
+        description: >
+          bp a denoised ASV may differ from quality.amplicon_len before it is reported,
+          and bp the median may differ before the run fails. A chosen value, not a
+          published threshold.
     required: [allow_zero_read_samples]
 
   mock:

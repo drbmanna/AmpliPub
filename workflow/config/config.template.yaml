@@ -82,6 +82,15 @@ quality:
 
 dada2:
   allow_zero_read_samples: false
+  asv_len_tolerance: 50           # bp a denoised ASV may differ from quality.amplicon_len
+  #                                 before it is reported, and bp the median may differ
+  #                                 before the run fails. Separate from quality.len_tolerance
+  #                                 on purpose: that one checks a reference database, this
+  #                                 one checks the data. A chosen value, not a published
+  #                                 threshold, and no source sets one. It exists because
+  #                                 8.9% of a V4 catalogue once sat at 294-456 bp on a
+  #                                 253 bp amplicon with a correct median and passed
+  #                                 every check in silence.
 
 mock:
   samples: []                     # ids as they appear in the run-level DADA2 table

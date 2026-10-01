@@ -44,6 +44,24 @@
   Greengenes2 ships one for V4 and none for V3-V4. The script extracts reads from a reference
   with the configured primers and fits a naive Bayes classifier on them, so the classifier is
   tied to the primer pair it was built for.
+* `dada2` now measures every ASV against `quality.amplicon_len`. Nothing did before, and the
+  read counts say nothing about length. A median outside the tolerance is fatal, because the
+  configured region is then not the region that was sequenced and the overlap floor, the
+  resolution claims and the region-matched classifier are all built on it. `quality` runs that
+  same check against a reference FASTA, but a reference is optional and many runs have none.
+  ASVs outside the tolerance are reported instead, in `asv_lengths.tsv` and
+  `asv_length_flags.tsv`, with the lengths that repeat across several ASVs named as clusters.
+  The median is blind to that tail: on a V4 arm of PRJNA643648 the median is 253 bp, exactly
+  the configured value, while 72 of 806 ASVs (8.9%) run from 307 to 456 bp, 17 of them at
+  441 bp and 16 at 446 bp, and every check in the pipeline passed. Those ASVs are flagged and
+  not removed, since chimeras, off-target amplification, carryover between runs of one
+  BioProject and real variation in a few taxa all produce off-length ASVs and nothing here
+  separates them.
+* New `dada2.asv_len_tolerance` (default 50 bp, same value and same reasoning as
+  `quality.len_tolerance`, kept separate because that one checks a reference database and this
+  one checks the data). No published source sets a length threshold for a denoised ASV: the six
+  checked for the denoising criteria set none either, so it is a chosen value and `criteria.tsv`
+  records it as one.
 
 ## Validation
 

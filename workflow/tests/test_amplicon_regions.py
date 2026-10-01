@@ -19,8 +19,8 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from amplicon_regions import (  # noqa: E402
-    IUPAC, RegionError, check_amplicon_len, extract_region, read_fasta, region_lengths,
-    revcomp,
+    IUPAC, RegionError, check_amplicon_len, extract_region, length_distribution,
+    read_fasta, region_lengths, revcomp,
 )
 
 FWD = "GTGCCAGCMGCCGCGGTAA"          # 515F, carries M
@@ -144,3 +144,76 @@ def test_the_boundary_of_the_tolerance_is_inclusive():
     assert check_amplicon_len([303], [], configured=253, tolerance=50)["median"] == 303
     with pytest.raises(RegionError):
         check_amplicon_len([304], [], configured=253, tolerance=50)
+
+
+def test_the_length_source_can_be_named_without_changing_the_old_wording():
+    # 02_quality.py's message must not move; 03_dada2.py passes ASVs, not references.
+    with pytest.raises(RegionError, match="the primers cut these references to a median"):
+        check_amplicon_len([460, 465], [], configured=253, tolerance=50)
+    with pytest.raises(RegionError, match="the denoised ASVs have a median"):
+        check_amplicon_len([460, 465], [], configured=253, tolerance=50,
+                           observed_as="the denoised ASVs have")
+
+
+# ---- the tail the median cannot see --------------------------------------
+#
+# Criteria fixed before these were run: a catalogue sitting on the amplicon reports no
+# tail, the PRJNA643648 shape (a correct median with 8.9% of ASVs at up to 1.8x) reports
+# one, repeated lengths are reported as clusters, the cutoffs are inclusive, and an empty
+# catalogue is refused rather than summarised as zero.
+
+# The V4 arm's shape, scaled down: a median of exactly 253 bp and an oversize tail.
+V4_WITH_TAIL = {f"in{i}": L for i, L in
+                enumerate([253, 253, 253, 253, 252, 254, 248, 258, 251, 290], 1)}
+V4_WITH_TAIL.update({"big1": 441, "big2": 441, "big3": 446, "big4": 456})
+
+
+def test_a_catalogue_on_the_amplicon_has_no_tail():
+    d = length_distribution({"a": 253, "b": 252, "c": 254}, 253, 50)
+    assert d["n_oversize"] == 0 and d["n_undersize"] == 0
+    assert d["oversize"] == [] and d["undersize"] == []
+    assert d["median"] == 253 and d["clusters"] == []
+    assert d["low_cutoff"] == 203 and d["high_cutoff"] == 303
+
+
+def test_the_tail_is_found_although_the_median_is_exactly_right():
+    """The whole point. check_amplicon_len passes this catalogue; this does not."""
+    assert check_amplicon_len(sorted(V4_WITH_TAIL.values()), [], 253, 50)["median"] == 253
+    d = length_distribution(V4_WITH_TAIL, 253, 50)
+    assert d["median"] == 253                     # the median says nothing is wrong
+    assert d["n_oversize"] == 4                   # and four ASVs are at up to 1.8x
+    assert d["n_total"] == 14
+    assert round(d["fraction_oversize"], 4) == round(4 / 14, 4)
+    assert [L for _, L in d["oversize"]] == [456, 446, 441, 441]   # longest first
+    assert d["n_undersize"] == 0
+
+
+def test_repeated_off_length_values_are_reported_as_clusters():
+    """17 at 441 bp is one amplified product; 17 scattered lengths are not."""
+    d = length_distribution(V4_WITH_TAIL, 253, 50)
+    assert d["clusters"] == [(441, 2)]            # only lengths seen more than once
+    many = {f"a{i}": 441 for i in range(17)}
+    many.update({f"b{i}": 446 for i in range(16)})
+    many["in"] = 253
+    d = length_distribution(many, 253, 50)
+    assert d["clusters"] == [(441, 17), (446, 16)]  # commonest first
+
+
+def test_both_cutoffs_are_inclusive():
+    d = length_distribution({"hi": 303, "lo": 203, "over": 304, "under": 202}, 253, 50)
+    assert [n for n, _ in d["oversize"]] == ["over"]
+    assert [n for n, _ in d["undersize"]] == ["under"]
+
+
+def test_a_zero_tolerance_is_allowed_and_reports_every_difference():
+    d = length_distribution({"a": 253, "b": 254}, 253, 0)
+    assert d["n_oversize"] == 1 and d["n_undersize"] == 0
+
+
+def test_the_guard_fires_on_an_empty_catalogue_or_nonsense_settings():
+    with pytest.raises(RegionError, match="empty catalogue"):
+        length_distribution({}, 253, 50)
+    with pytest.raises(RegionError, match="tolerance cannot be negative"):
+        length_distribution({"a": 253}, 253, -1)
+    with pytest.raises(RegionError, match="must be positive"):
+        length_distribution({"a": 253}, 0, 50)

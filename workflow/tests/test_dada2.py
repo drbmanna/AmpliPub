@@ -7,6 +7,7 @@ would write. The stats table has the columns read out of q2_dada2/_denoise.py in
 
 import csv
 import importlib.util
+import logging
 import pathlib
 import sys
 import time
@@ -66,17 +67,56 @@ def trunc_file(tmp_path, f=251, r=218, amplicon=253, overlap=12, margin=20, extr
     return str(p)
 
 
-class FakeRunner:
-    """Stands in for d.run_cmd. Writes the artifacts denoise-paired would write."""
+def read_tsv(path):
+    """Rows of a TSV, ignoring the comment lines the stage writes above the header."""
+    lines = [l for l in pathlib.Path(path).read_text().splitlines()
+             if l and not l.startswith("#")]
+    return list(csv.DictReader(lines, delimiter="	"))
 
-    def __init__(self, stats=None, rc=0, write=True, skip=()):
+
+def read_tsv(path):
+    """Rows of a TSV, ignoring the comment lines a stage writes above the header."""
+    lines = [l for l in pathlib.Path(path).read_text().splitlines()
+             if l and not l.startswith("#")]
+    return list(csv.DictReader(lines, delimiter="\t"))
+
+
+def fasta(lengths):
+    """A FASTA of ASVs with the given lengths, named asv1, asv2, ... in order."""
+    return "".join(f">asv{i}\n{'A' * L}\n" for i, L in enumerate(lengths, 1))
+
+
+# A V4 catalogue that sits on the configured 253 bp, within the 20 bp of natural
+# variation 02_quality.py's MARGIN allows for.
+IN_RANGE = [253, 253, 252, 254, 248, 258]
+
+# The shape found on PRJNA643648's V4 arm: a median that is exactly right, and a tail of
+# identical-length ASVs at 1.7x the amplicon that no check in the pipeline looked at.
+OVERSIZE_TAIL = IN_RANGE + [441, 441, 446, 456]
+
+
+class FakeRunner:
+    """Stands in for d.run_cmd. Writes the artifacts denoise-paired would write.
+
+    It also answers `qiime tools export`, which the ASV length check uses to get at the
+    sequences, by writing the FASTA the export would have produced.
+    """
+
+    def __init__(self, stats=None, rc=0, write=True, skip=(), asvs=None):
         self.stats = stats if stats is not None else stats_tsv(HEALTHY)
+        self.asvs = IN_RANGE if asvs is None else asvs
         self.rc, self.write, self.skip = rc, write, skip
         self.calls = []
 
     def __call__(self, cmd, timeout):
         self.calls.append(cmd)
         assert timeout > 0
+        if "export" in cmd:
+            if self.write and "export" not in self.skip:
+                dest = pathlib.Path(cmd[cmd.index("--output-path") + 1])
+                dest.mkdir(parents=True, exist_ok=True)
+                (dest / "dna-sequences.fasta").write_text(fasta(self.asvs))
+            return self.rc, "", "Plugin error from tools\n" if self.rc else ""
         if self.write:
             for flag in ("--o-table", "--o-representative-sequences"):
                 if flag not in self.skip:
@@ -317,6 +357,115 @@ def test_empty_input_fires(tmp_path, monkeypatch):
                                  ["--threads", "0"]])
 def test_out_of_range_options_fire(tmp_path, monkeypatch, bad):
     assert run_main(monkeypatch, tmp_path, FakeRunner(), extra=bad) == 1
+
+
+# ---- the ASV length check ------------------------------------------------
+#
+# Written after 8.9% of a V4 catalogue was found sitting at 294-456 bp on a 253 bp
+# amplicon, having passed every check in the pipeline. The median was 253 bp exactly, so
+# a median test alone does not fire: each test below says which of the two it exercises.
+
+def test_asv_lengths_are_measured_and_written(tmp_path, monkeypatch):
+    assert run_main(monkeypatch, tmp_path, FakeRunner()) == 0
+    out = tmp_path / "out"
+    rows = list(csv.DictReader((out / "asv_lengths.tsv").open(), delimiter="\t"))
+    assert len(rows) == len(IN_RANGE)
+    assert {r["class"] for r in rows} == {"in_range"}
+    assert rows[0]["length"] == "258" and rows[0]["difference_from_amplicon_len"] == "5"
+    # Nothing was off-length, so the flags file is a header and nothing else.
+    body = [l for l in (out / "asv_length_flags.tsv").read_text().splitlines()
+            if not l.startswith("#")]
+    assert body == ["feature-id\tlength\tdifference_from_amplicon_len\tclass"]
+
+
+def test_the_oversize_guard_fires_on_a_tail_the_median_cannot_see(tmp_path, monkeypatch,
+                                                                 caplog):
+    """The guard the finding asked for. Median 253 bp, four ASVs at up to 1.8x."""
+    runner = FakeRunner(asvs=OVERSIZE_TAIL)
+    with caplog.at_level(logging.WARNING, logger="dada2"):
+        rc = run_main(monkeypatch, tmp_path, runner)
+    assert rc == 0  # flagged and reported, not failed: the table is usable
+    out = tmp_path / "out"
+    flagged = read_tsv(out / "asv_length_flags.tsv")
+    assert [r["length"] for r in flagged] == ["456", "446", "441", "441"]
+    assert {r["class"] for r in flagged} == {"oversize"}
+    assert "4 of 10 ASVs (40.0%) are oversize, above 303 bp: 441-456 bp" in caplog.text
+    assert "2 at 441 bp" in caplog.text          # the cluster, not scattered noise
+    # the threshold is stated as a choice, not implied to be a standard
+    assert "no published source sets a length threshold" in caplog.text
+    assert "flagged, not removed" in caplog.text
+    lengths = {r["feature-id"]: r["class"] for r in
+               csv.DictReader((out / "asv_lengths.tsv").open(), delimiter="\t")}
+    assert sum(v == "oversize" for v in lengths.values()) == 4
+    assert sum(v == "in_range" for v in lengths.values()) == len(IN_RANGE)
+
+
+def test_the_oversize_guard_stays_quiet_inside_the_tolerance(tmp_path, monkeypatch):
+    """At the cutoff exactly, not flagged: the guard must not fire on its own boundary.
+
+    303 bp is 253 + 50. The 268-293 bp primer readthrough band 01_primers.py already
+    handles sits below it on purpose and is not reported twice.
+    """
+    runner = FakeRunner(asvs=IN_RANGE + [268, 293, 303])
+    assert run_main(monkeypatch, tmp_path, runner) == 0
+    rows = list(csv.DictReader((tmp_path / "out" / "asv_lengths.tsv").open(),
+                               delimiter="\t"))
+    assert {r["class"] for r in rows} == {"in_range"}
+
+
+def test_the_undersize_guard_fires_as_well(tmp_path, monkeypatch, caplog):
+    runner = FakeRunner(asvs=IN_RANGE + [120, 202])
+    with caplog.at_level(logging.WARNING, logger="dada2"):
+        assert run_main(monkeypatch, tmp_path, runner) == 0
+    assert "2 of 8 ASVs (25.0%) are undersize, below 203 bp: 120-202 bp" in caplog.text
+    flagged = read_tsv(tmp_path / "out" / "asv_length_flags.tsv")
+    assert [r["length"] for r in flagged] == ["120", "202"]
+    assert {r["class"] for r in flagged} == {"undersize"}
+
+
+def test_the_median_guard_hard_fails_when_the_region_is_wrong(tmp_path, monkeypatch):
+    """V3-V4 ASVs denoised with amplicon_len left at V4's 253: the whole run is wrong."""
+    runner = FakeRunner(asvs=[427, 427, 428, 426])
+    assert run_main(monkeypatch, tmp_path, runner) == 1
+    text = (tmp_path / "out" / "dada2_log.txt").read_text()
+    assert "do not describe the configured region" in text
+    assert "the denoised ASVs have a median of 427 bp" in text
+    assert "what was actually sequenced" in text
+
+
+def test_the_median_guard_fires_one_bp_past_the_tolerance():
+    assert d.check_asv_lengths({"a": 303}, 253, 50)["median"] == 303
+    with pytest.raises(d.Dada2Error, match="do not describe the configured region"):
+        d.check_asv_lengths({"a": 304}, 253, 50)
+    with pytest.raises(d.Dada2Error, match="do not describe the configured region"):
+        d.check_asv_lengths({"a": 202}, 253, 50)
+
+
+def test_an_empty_catalogue_fires(tmp_path, monkeypatch):
+    assert run_main(monkeypatch, tmp_path, FakeRunner(asvs=[])) == 1
+    assert "cannot read the exported ASVs" in (tmp_path / "out" / "dada2_log.txt").read_text()
+
+
+def test_a_failed_export_fires(tmp_path, monkeypatch):
+    assert run_main(monkeypatch, tmp_path, FakeRunner(skip=("export",))) == 1
+    assert "wrote no" in (tmp_path / "out" / "dada2_log.txt").read_text()
+
+
+def test_the_tolerance_is_a_flag_and_is_recorded(tmp_path, monkeypatch):
+    runner = FakeRunner(asvs=OVERSIZE_TAIL)
+    assert run_main(monkeypatch, tmp_path, runner,
+                    extra=["--asv-len-tolerance", "250"]) == 0
+    rows = list(csv.DictReader((tmp_path / "out" / "asv_lengths.tsv").open(),
+                               delimiter="\t"))
+    assert {r["class"] for r in rows} == {"in_range"}  # 3-503 bp, so nothing is off
+    criteria = (tmp_path / "out" / "criteria.tsv").read_text()
+    assert "asv_len_tolerance\tparameter\t250" in criteria
+    assert "none of the six sources sets a length threshold" in criteria
+
+
+def test_a_negative_tolerance_fires(tmp_path, monkeypatch):
+    assert run_main(monkeypatch, tmp_path, FakeRunner(),
+                    extra=["--asv-len-tolerance", "-1"]) == 1
 
 
 # ---- the no-hang rule ----------------------------------------------------

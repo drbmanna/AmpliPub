@@ -7,7 +7,8 @@ script
   1. reads trunc_len.tsv and repeats the overlap check before spending any compute,
   2. runs qiime dada2 denoise-paired with every parameter stated explicitly,
   3. reads the denoising stats back out of the artifact,
-  4. applies the criteria below and writes them next to the results.
+  4. measures the length of every ASV against `quality.amplicon_len`,
+  5. applies the criteria below and writes them next to the results.
 
 Why the criteria look like this. Six sources were checked on 2026-09-12: the DADA2
 tutorial, the mothur MiSeq SOP, Kozich et al. 2013 (AEM 79:5112), Callahan et al. 2016
@@ -21,7 +22,15 @@ Hard fail (structural, the table cannot be believed):
   - truncation lengths that leave too little overlap to merge (the 02_quality check,
     repeated here because this is the boundary where the compute is spent),
   - a library that comes out with zero reads,
-  - an empty feature table.
+  - an empty feature table,
+  - an ASV catalogue whose median length does not agree with amplicon_len. 02_quality.py
+    runs the same check against a reference FASTA, but that is optional and many runs have
+    none, so this repeats it against the data, where it cannot be skipped. A median far
+    from amplicon_len means the configured region is not the region that was sequenced,
+    and the overlap floor, the resolution claims and the region-matched classifier are all
+    built on it. This fires after the denoise, so the compute is already spent and
+    Snakemake will remove the artifacts: that is the same cost the zero-read and
+    empty-table checks already carry at this boundary.
 
 Flag and report (sourced, qualitative in the original):
   - more than half the reads lost at any single step outside filtering. DADA2 tutorial:
@@ -29,6 +38,18 @@ Flag and report (sourced, qualitative in the original):
     (sic, benjjneb.github.io/dada2/tutorial.html, fetched 2026-09-12),
   - more than half the merged reads lost to chimeras. Same source: "If most of your
     reads were removed as chimeric, upstream processing may need to be revisited."
+
+Flag and report (no source exists at all, our own check):
+  - ASVs further than --asv-len-tolerance from amplicon_len, in either direction. None of
+    the six sources sets a length threshold for a denoised ASV, so the tolerance is a
+    chosen value exposed as a flag, in the same way 02_quality.py exposes --len-tolerance
+    and --min-reach. Written because nothing here caught it: on PRJNA643648's V4 arm the
+    median ASV was 253 bp, exactly the configured amplicon, while 72 of 806 ASVs (8.9%)
+    ran from 294 to 456 bp with 17 at 441 bp and 16 at 446 bp, and every existing check
+    passed in silence. Being off-length is evidence, not a verdict. Chimeras, off-target
+    amplification, carryover between runs on the same BioProject and genuine variation in
+    a few taxa all produce it, and separating them is not this stage's job, so the ASVs
+    are named in asv_length_flags.tsv and the judgement is left to whoever reads it.
 
 No numeric threshold here is presented as a standard, because none exists. "More than
 half" is the tutorial's own "majority" and "most", made countable.
@@ -61,9 +82,22 @@ import sys
 import zipfile
 from datetime import datetime, timezone
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from amplicon_regions import (  # noqa: E402
+    RegionError, check_amplicon_len, length_distribution, read_fasta,
+)
 
 MAJORITY = 0.5  # the tutorial's "majority" and "most", made countable
+ASV_LEN_TOLERANCE = 50  # bp an ASV may differ from amplicon_len before it is reported.
+#                         The same chosen value and the same reasoning as 02_quality.py's
+#                         LEN_TOLERANCE: within one region lengths vary by tens of bases,
+#                         between regions by hundreds, so this sits in the gap. No
+#                         published source sets it. On a 253 bp V4 amplicon it reports
+#                         anything outside 203-303 bp, which leaves the 268-293 bp primer
+#                         readthrough band 01_primers.py already handles alone and reports
+#                         the group above it.
 
 TUTORIAL = "benjjneb.github.io/dada2/tutorial.html, fetched 2026-09-12"
 QUOTE_STEP = ('DADA2 tutorial: "Outside of filtering, there should no step in which a '
@@ -239,6 +273,109 @@ def write_flags(path: str, flags: list[dict]) -> None:
             w.writerow([f[c] for c in cols])
 
 
+# ---- ASV lengths ---------------------------------------------------------
+
+def export_rep_seqs(qza: str, dest: str, env: str, timeout: int) -> str:
+    """Export rep_seqs.qza and return the FASTA inside it."""
+    rc, _, err = run_cmd(["conda", "run", "-n", env, "qiime", "tools", "export",
+                          "--input-path", qza, "--output-path", dest], timeout)
+    if rc != 0:
+        raise Dada2Error(f"qiime tools export failed on {qza} with code {rc}:\n{_tail(err)}")
+    path = os.path.join(dest, "dna-sequences.fasta")
+    if not os.path.isfile(path):
+        raise Dada2Error(f"export finished but wrote no {path}")
+    return path
+
+
+def asv_lengths(fasta: str) -> dict[str, int]:
+    """Length of every denoised ASV, keyed by feature id."""
+    try:
+        records = read_fasta(fasta)
+    except RegionError as exc:
+        raise Dada2Error(f"cannot read the exported ASVs: {exc}") from exc
+    return {name: len(seq) for name, seq in records.items()}
+
+
+def check_asv_lengths(lengths: dict[str, int], configured: int,
+                      tolerance: int) -> dict[str, object]:
+    """The median must agree with amplicon_len; the tails are measured and returned.
+
+    Two questions, and the second is the one that was being missed. The median says
+    whether the catalogue describes the configured region at all, and disagreeing with it
+    is structural, so it fails. The tails say what else is in the catalogue, and the
+    median is blind to them: a run can sit exactly on 253 bp and still carry 8.9% of its
+    ASVs at up to 1.8x that. Those are reported, not failed.
+    """
+    try:
+        check_amplicon_len(sorted(lengths.values()), [], configured, tolerance,
+                           observed_as="the denoised ASVs have")
+        return length_distribution(lengths, configured, tolerance)
+    except RegionError as exc:
+        raise Dada2Error(
+            f"the {len(lengths)} denoised ASVs do not describe the configured region. "
+            f"{exc} Here the reads are the evidence, not a reference database, so this is "
+            "amplicon_len disagreeing with what was actually sequenced") from exc
+
+
+def write_asv_lengths(path: str, lengths: dict[str, int], dist: dict[str, object]) -> None:
+    """Every ASV with its length and how far it sits from amplicon_len."""
+    low, high = int(dist["low_cutoff"]), int(dist["high_cutoff"])
+    configured = int(dist["configured"])
+    with open(path, "w", newline="") as fh:
+        w = csv.writer(fh, delimiter="\t", lineterminator="\n")
+        w.writerow(["feature-id", "length", "difference_from_amplicon_len", "class"])
+        for name, L in sorted(lengths.items(), key=lambda x: (-x[1], x[0])):
+            kind = "oversize" if L > high else "undersize" if L < low else "in_range"
+            w.writerow([name, L, L - configured, kind])
+
+
+def write_length_flags(path: str, dist: dict[str, object]) -> None:
+    """Only the ASVs outside the tolerance, longest first, then shortest first."""
+    with open(path, "w", newline="") as fh:
+        fh.write(f"# ASVs further than {dist['tolerance']} bp from amplicon_len "
+                 f"{dist['configured']} bp, so outside {dist['low_cutoff']}-"
+                 f"{dist['high_cutoff']} bp.\n")
+        fh.write("# The tolerance is a chosen value, not a published threshold.\n"
+                 "# Being off-length is evidence about an ASV, not a verdict on it:\n"
+                 "# chimeras, off-target amplification and carryover between runs all\n"
+                 "# look like this, and so does real variation in a few taxa.\n")
+        w = csv.writer(fh, delimiter="\t", lineterminator="\n")
+        w.writerow(["feature-id", "length", "difference_from_amplicon_len", "class"])
+        for name, L in dist["oversize"]:
+            w.writerow([name, L, L - int(dist["configured"]), "oversize"])
+        for name, L in dist["undersize"]:
+            w.writerow([name, L, L - int(dist["configured"]), "undersize"])
+
+
+def report_lengths(dist: dict[str, object]) -> None:
+    """Say what the length distribution is, and shout only if something is outside it."""
+    log.info("%d ASVs, median %d bp against amplicon_len %d (range %d-%d, tolerance "
+             "+/-%d bp, a chosen value)", dist["n_total"], dist["median"],
+             dist["configured"], dist["min"], dist["max"], dist["tolerance"])
+    if not dist["n_oversize"] and not dist["n_undersize"]:
+        log.info("every ASV is within %d bp of amplicon_len", dist["tolerance"])
+        return
+    for kind, cut, cmp_ in (("oversize", dist["high_cutoff"], "above"),
+                            ("undersize", dist["low_cutoff"], "below")):
+        n = int(dist[f"n_{kind}"])
+        if not n:
+            continue
+        rows = dist[kind]
+        log.warning("%d of %d ASVs (%.1f%%) are %s, %s %d bp: %d-%d bp. See "
+                    "asv_length_flags.tsv", n, dist["n_total"],
+                    100 * float(dist[f"fraction_{kind}"]), kind, cmp_, cut,
+                    min(L for _, L in rows), max(L for _, L in rows))
+    if dist["clusters"]:
+        top = ", ".join(f"{n} at {L} bp" for L, n in dist["clusters"][:5])
+        log.warning("off-length ASVs cluster at identical lengths (%s), which is the "
+                    "shape of one amplified product rather than scattered noise. "
+                    "Chimeras, off-target amplification and carryover between runs are "
+                    "all candidates; nothing here tells them apart", top)
+    log.warning("no published source sets a length threshold for a denoised ASV, so the "
+                "%d bp tolerance is our own choice and is recorded in criteria.tsv. "
+                "These ASVs are flagged, not removed", dist["tolerance"])
+
+
 def write_criteria(path: str, args, v: dict[str, int], overlap: int) -> None:
     """Write down what was being tested for, in the same directory as the result."""
     with open(path, "w", newline="") as fh:
@@ -257,6 +394,15 @@ def write_criteria(path: str, args, v: dict[str, int], overlap: int) -> None:
         w.writerow(["reads lost at one step outside filtering", "flag",
                     f"<= {args.majority:.0%}", QUOTE_STEP])
         w.writerow(["reads lost to chimeras", "flag", f"<= {args.majority:.0%}", QUOTE_CHIMERA])
+        w.writerow(["median ASV length against amplicon_len", "hard fail",
+                    f"|median - {v['amplicon_len']}| <= {args.asv_len_tolerance} bp",
+                    "arithmetic; the tolerance is our choice, no source sets one"])
+        w.writerow(["ASVs outside amplicon_len +/- tolerance", "flag",
+                    f"{v['amplicon_len'] - args.asv_len_tolerance}-"
+                    f"{v['amplicon_len'] + args.asv_len_tolerance} bp",
+                    "our choice; none of the six sources sets a length threshold"])
+        w.writerow(["asv_len_tolerance", "parameter", args.asv_len_tolerance,
+                    "a chosen value, not a published one"])
         w.writerow(["trunc_len_f", "parameter", v["trunc_len_f"], "02_quality.py"])
         w.writerow(["trunc_len_r", "parameter", v["trunc_len_r"], "02_quality.py"])
         w.writerow(["expected_overlap", "derived", overlap, "02_quality.py"])
@@ -289,6 +435,10 @@ def parse_args(argv):
                         "passed explicitly (default 1)")
     p.add_argument("--majority", type=float, default=MAJORITY,
                    help=f"fraction that counts as the tutorial's 'majority' (default {MAJORITY})")
+    p.add_argument("--asv-len-tolerance", type=int, default=ASV_LEN_TOLERANCE,
+                   help=f"bp an ASV may differ from amplicon_len before it is reported, "
+                        f"and bp the median may differ before the run fails "
+                        f"(default {ASV_LEN_TOLERANCE}, a chosen value, not a published one)")
     p.add_argument("--allow-zero-read-samples", action="store_true",
                    help="downgrade the zero-read library check from hard fail to a flag. "
                         "A deliberate choice, recorded in criteria.tsv")
@@ -311,6 +461,9 @@ def run(args) -> None:
         raise Dada2Error(f"--threads must be at least 1, got {args.threads}")
     if not 0 < args.majority < 1:
         raise Dada2Error(f"--majority must be between 0 and 1, got {args.majority}")
+    if args.asv_len_tolerance < 0:
+        raise Dada2Error("--asv-len-tolerance cannot be negative, got "
+                         f"{args.asv_len_tolerance}")
     os.makedirs(outdir, exist_ok=True)
     setup_logging(outdir)
     log.info("=" * 70)
@@ -323,10 +476,12 @@ def run(args) -> None:
     overlap = check_overlap(v)
     log.info("trunc-len-f %d, trunc-len-r %d, expected overlap %d bp",
              v["trunc_len_f"], v["trunc_len_r"], overlap)
-    log.info("criteria: hard fail on no overlap, a zero-read library%s, or an empty table; "
-             "flag above %.0f%% loss at any step after filtering. No published source sets "
-             "a threshold, see criteria.tsv", " (overridden to a flag)"
-             if args.allow_zero_read_samples else "", args.majority * 100)
+    log.info("criteria: hard fail on no overlap, a zero-read library%s, an empty table, or "
+             "a median ASV length more than %d bp from amplicon_len %d; flag above %.0f%% "
+             "loss at any step after filtering and any ASV outside that tolerance. No "
+             "published source sets a threshold, see criteria.tsv", " (overridden to a flag)"
+             if args.allow_zero_read_samples else "", args.asv_len_tolerance,
+             v["amplicon_len"], args.majority * 100)
 
     table = os.path.join(outdir, "table.qza")
     rep_seqs = os.path.join(outdir, "rep_seqs.qza")
@@ -377,6 +532,16 @@ def run(args) -> None:
                     "overridden: %s", len(empty), "y" if len(empty) == 1 else "ies",
                     ", ".join(empty[:10]))
 
+    # The ASV catalogue against amplicon_len. The read counts above say nothing about it:
+    # a run can retain every read and still denoise to a region that is not the one
+    # configured, or carry a tail of ASVs at twice the amplicon.
+    lengths = asv_lengths(export_rep_seqs(rep_seqs, os.path.join(outdir, "seqs"),
+                                          args.env, args.timeout))
+    dist = check_asv_lengths(lengths, v["amplicon_len"], args.asv_len_tolerance)
+    write_asv_lengths(os.path.join(outdir, "asv_lengths.tsv"), lengths, dist)
+    write_length_flags(os.path.join(outdir, "asv_length_flags.tsv"), dist)
+    report_lengths(dist)
+
     pooled = [(b, a) for b, a, _ in STEPS if lost_fraction(totals[b], totals[a]) > args.majority]
     if pooled:
         log.warning("pooled across all samples, more than %.0f%% of reads are lost at: %s. %s",
@@ -393,7 +558,9 @@ def run(args) -> None:
     else:
         log.info("no sample crossed the %.0f%% loss flag at any step after filtering",
                  args.majority * 100)
-    log.info("done: %s, %s, %s", table, rep_seqs, os.path.join(outdir, "dada2_stats.tsv"))
+    log.info("done: %s, %s, %s, %s", table, rep_seqs,
+             os.path.join(outdir, "dada2_stats.tsv"),
+             os.path.join(outdir, "asv_lengths.tsv"))
 
 
 def main(argv=None) -> int:

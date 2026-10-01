@@ -210,9 +210,12 @@ rule dada2:
     params:
         py=PY, wf=WF, outdir=Q2 / "dada2", env=ENV["qiime2"],
         zero=switch("--allow-zero-read-samples", config["dada2"]["allow_zero_read_samples"]),
+        # .get, like len_tolerance above: configs written before this key existed still run.
+        asv_tol=config["dada2"].get("asv_len_tolerance", 50),
     shell:
         "{params.py} {params.wf}/03_dada2.py -i {input.reads} -t {input.trunc} -o {params.outdir} "
-        "--threads {threads} {params.zero} --env {params.env} > {log} 2>&1"
+        "--threads {threads} --asv-len-tolerance {params.asv_tol} {params.zero} "
+        "--env {params.env} > {log} 2>&1"
 
 
 # --- 04-06: mock check, taxonomy, region resolution ----------------------------------------

@@ -384,11 +384,36 @@ paired track table `denoised` is `denoisedF`, the forward reads only. The drop f
 `denoised` to `merged` therefore carries reverse denoising as well as merging. The
 reports say so rather than calling it a merge rate.
 
+**Every ASV is measured against `quality.amplicon_len`**, because the read counts above
+say nothing about length. A run can retain almost every read and still denoise to a region
+that is not the one configured, or carry a tail of ASVs at nearly twice the amplicon. The
+two questions are answered separately, and the second is the one that was being missed:
+
+- The **median** says whether the catalogue describes the configured region at all.
+  Disagreeing with `amplicon_len` by more than `--asv-len-tolerance` is structural, so it
+  is fatal. `02_quality.py` runs the same check against a reference FASTA, but that is
+  optional and many runs have none, so it is repeated here against the data.
+- The **tails** say what else is in the catalogue, and the median cannot see them. On
+  PRJNA643648's V4 arm the median was 253 bp, exactly the configured value, while 72 of
+  806 ASVs (8.9%) ran from 294 to 456 bp, with 17 at 441 bp and 16 at 446 bp. Every check
+  in this pipeline passed in silence. Those ASVs are now named in `asv_length_flags.tsv`,
+  with the lengths that repeat across several ASVs reported as clusters, since a cluster of
+  identical off-length sequences is the shape of one amplified product rather than
+  scattered noise.
+
+**No published source sets a length threshold for a denoised ASV**, so
+`--asv-len-tolerance` is our own value and is recorded in `criteria.tsv` with that said
+plainly. Off-length ASVs are flagged, never removed: being off-length is evidence about a
+sequence, not a verdict on it. Chimeras, off-target amplification, carryover between runs
+on one BioProject and real variation in a few taxa all produce it, and telling them apart
+is not this stage's job.
+
 | Option | Meaning |
 |---|---|
 | `-t`, `--trunc-len FILE` | `trunc_len.tsv` from `02_quality.py` |
 | `--threads N` | DADA2 threads, default 1, always passed to QIIME 2 explicitly |
 | `--majority F` | Fraction that counts as the tutorial's "majority", default 0.5 |
+| `--asv-len-tolerance N` | bp an ASV may differ from `amplicon_len` before it is reported, and bp the median may differ before the run fails. Default 50, a chosen value, not a published one |
 | `--allow-zero-read-samples` | Downgrade the zero-read library check to a flag. Recorded in `criteria.tsv` |
 | `--timeout S` | Seconds before `denoise-paired` is killed, default 86400 |
 
@@ -400,6 +425,8 @@ reports say so rather than calling it a merge rate.
 | `denoising_stats.qza` | The QIIME 2 stats artifact as produced |
 | `dada2_stats.tsv` | Per sample: every count, the loss at each step, and the share of input retained |
 | `dada2_flags.tsv` | One row per sample and step that crossed the flag, with the counts behind it |
+| `asv_lengths.tsv` | Every ASV with its length, its difference from `amplicon_len`, and whether it is in range |
+| `asv_length_flags.tsv` | Only the ASVs outside the tolerance, longest first, then shortest first |
 | `criteria.tsv` | The criteria applied, with the source for each |
 | `dada2_log.txt` | Command, versions, parameters, pooled losses and every flag |
 
@@ -410,6 +437,8 @@ reports say so rather than calling it a merge rate.
 | Overlap is rechecked before the run starts | This is where the compute is spent; a bad length would otherwise cost hours and return a near-empty table |
 | A library with zero reads is fatal unless overridden | Silently carrying a dead sample through the analysis is worse than stopping |
 | An empty feature table is fatal | The most common catastrophic 16S failure, and it does not raise an error on its own |
+| A median ASV length outside the tolerance is fatal | The configured region is not the region that was sequenced, and the overlap floor, the resolution claims and the region-matched classifier are all built on it |
+| ASVs outside the tolerance are reported, not removed | 8.9% of a catalogue once sat at up to 1.8x the amplicon with a correct median and crossed no check at all |
 | The stats table must have the paired-end columns, in order, all numeric | A single-end input or a changed format would give wrong percentages silently |
 | `denoise-paired` must exit zero and write all three artifacts | An exit code alone does not prove the outputs exist |
 
